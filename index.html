@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Knight Runner — Queens Step Forward</title>
+<title>Knight Runner — Aligned Bishops</title>
 <style>
 :root{--board:600px;--cell:75px;}
 *{box-sizing:border-box;}
@@ -139,7 +139,6 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
 
   /* Enemies: base speeds (cells/sec, scaled by speedMult) */
   const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 };
-  const LATERAL_SPEED = { bishop:0.95 };
 
   function spawnEnemy(){
     const r = Math.random();
@@ -155,16 +154,14 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
 
     if (type === 'queen') {
       // Discrete stepper: choose one of three squares in front each row
-      // Cell coords for tracking:
-      const qx = x, qy = y; // starts at row -1, will target row 0 first
       const e = {
-        el, type, px, py,
-        qx, qy,                // current cell (integers)
-        qtx: x, qty: 0,        // target cell (will be picked below)
-        qtpX: x*CELL, qtpY: 0, // target pixel
-        stepSpeed: BASE_SPEED.queen // cells/sec along the straight path
+        el, type,
+        px, py,
+        qx: x, qy: y,            // current cell indices (queen starts at row -1)
+        qtx: x, qty: 0,          // next target cell
+        qtpX: x*CELL, qtpY: 0,   // target pixel
+        stepSpeed: BASE_SPEED.queen // cells/sec along straight segment
       };
-      // pick first target (row 0)
       pickNextQueenTarget(e);
       e.qtpX = e.qtx * CELL; e.qtpY = e.qty * CELL;
       el.style.left = `${px}px`; el.style.top = `${py}px`;
@@ -172,10 +169,32 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
       return;
     }
 
-    // Non-queen generic (continuous velocity)
+    if (type === 'bishop') {
+      // Diagonal stepper: always move to the next diagonal cell (x±1,y+1)
+      const dirX = (Math.random()<0.5) ? -1 : 1;
+      const e = {
+        el, type,
+        px, py,
+        bx: x, by: y,            // current cell indices (bishop starts at row -1)
+        bdir: dirX,              // -1 or +1
+        btx: x + dirX, bty: 0,   // next target cell (row 0 first)
+        btpX: (x + dirX) * CELL, btpY: 0, // target pixel
+        stepSpeed: BASE_SPEED.bishop
+      };
+      // clamp initial if spawning at an edge
+      if (e.btx < 0 || e.btx >= SIZE) {
+        e.bdir = -e.bdir;
+        e.btx = e.bx + e.bdir;
+        e.btpX = e.btx * CELL;
+      }
+      el.style.left = `${px}px`; el.style.top = `${py}px`;
+      enemies.push(e);
+      return;
+    }
+
+    // Pawns / Rooks continuous
     let vxCells = 0, vyCells = BASE_SPEED[type];
-    if (type === 'rook')   { vxCells = 0; vyCells = BASE_SPEED.rook; }
-    if (type === 'bishop') { vxCells = (Math.random()<0.5 ? -1 : 1) * LATERAL_SPEED.bishop; }
+    if (type === 'rook') { vxCells = 0; vyCells = BASE_SPEED.rook; }
 
     const e = { el, type, px, py, vxCells, vyCells };
     el.style.left = `${px}px`; el.style.top = `${py}px`;
@@ -183,19 +202,28 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   }
 
   function pickNextQueenTarget(e){
-    // Choose from (x-1, x, x+1) for the next row down
-    const options = [];
-    const cy = (e.qy);           // current cell row
-    const cx = (e.qx);           // current cell col
+    // choose from x-1,x,x+1 at next row
+    const cx = e.qx, cy = e.qy;
     const ny = cy + 1;
+    const options = [];
     for (const dx of [-1,0,1]) {
       const nx = cx + dx;
       if (nx>=0 && nx<SIZE) options.push(nx);
     }
-    // If off the bottom, just go straight (will be removed soon anyway)
     const nx = options[Math.floor(Math.random()*options.length)] ?? cx;
-    e.qtx = nx;
-    e.qty = ny;
+    e.qtx = nx; e.qty = ny;
+  }
+
+  function pickNextBishopTarget(e){
+    // next diagonal cell (may bounce at side walls)
+    const cx = e.bx, cy = e.by;
+    let nx = cx + e.bdir;
+    const ny = cy + 1;
+    if (nx < 0 || nx >= SIZE) {
+      e.bdir = -e.bdir;
+      nx = cx + e.bdir;
+    }
+    e.btx = nx; e.bty = ny;
   }
 
   /* Difficulty / spawn */
@@ -234,7 +262,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
       const e = enemies[i];
 
       if (e.type === 'queen') {
-        // Move toward target square at constant speed
+        // Move toward (qtpX,qtpY)
         const speedPx = e.stepSpeed * CELL * speedMult;
         const dx = e.qtpX - e.px;
         const dy = e.qtpY - e.py;
@@ -242,37 +270,43 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
         const step = speedPx * dtSec;
 
         if (dist <= step || dist === 0){
-          // Snap to target
           e.px = e.qtpX; e.py = e.qtpY;
           e.el.style.left = `${e.px}px`; e.el.style.top = `${e.py}px`;
-          // Update current cell to target
           e.qx = e.qtx; e.qy = e.qty;
-
-          // If off the board, remove next frame
-          if (e.qy >= SIZE){
-            e.el.remove(); enemies.splice(i,1); continue;
-          }
-
-          // Pick next target one row down
+          if (e.qy >= SIZE){ e.el.remove(); enemies.splice(i,1); continue; }
           pickNextQueenTarget(e);
           e.qtpX = e.qtx * CELL; e.qtpY = e.qty * CELL;
         } else {
-          // Slide towards target
           const ux = dx / dist, uy = dy / dist;
-          e.px += ux * step;
-          e.py += uy * step;
-          e.el.style.left = `${e.px}px`;
-          e.el.style.top  = `${e.py}px`;
+          e.px += ux * step; e.py += uy * step;
+          e.el.style.left = `${e.px}px`; e.el.style.top = `${e.py}px`;
+        }
+
+      } else if (e.type === 'bishop') {
+        // Move toward (btpX,btpY) along perfect diagonal (center-to-center)
+        const speedPx = e.stepSpeed * CELL * speedMult;
+        const dx = e.btpX - e.px;
+        const dy = e.btpY - e.py;
+        const dist = Math.hypot(dx, dy);
+        const step = speedPx * dtSec;
+
+        if (dist <= step || dist === 0){
+          e.px = e.btpX; e.py = e.btpY;
+          e.el.style.left = `${e.px}px`; e.el.style.top = `${e.py}px`;
+          e.bx = e.btx; e.by = e.bty;
+          if (e.by >= SIZE){ e.el.remove(); enemies.splice(i,1); continue; }
+          pickNextBishopTarget(e);
+          e.btpX = e.btx * CELL; e.btpY = e.bty * CELL;
+        } else {
+          const ux = dx / dist, uy = dy / dist;
+          e.px += ux * step; e.py += uy * step;
+          e.el.style.left = `${e.px}px`; e.el.style.top = `${e.py}px`;
         }
 
       } else {
-        // Pawns, Bishops (bounce), Rooks (fast plunge)
-        if (e.type === 'bishop'){
-          const nextPx = e.px + e.vxCells * CELL * speedMult * dtSec;
-          if (nextPx < 0 || nextPx > (SIZE-1)*CELL){ e.vxCells = -e.vxCells; }
-        }
-        const vx = e.vxCells * CELL * speedMult;
-        const vy = e.vyCells * CELL * speedMult;
+        // Pawns / Rooks (continuous)
+        const vx = (e.vxCells||0) * CELL * speedMult;
+        const vy = (e.vyCells||0) * CELL * speedMult;
         e.px = clampX(e.px + vx * dtSec);
         e.py += vy * dtSec;
         e.el.style.left = `${e.px}px`;
@@ -284,7 +318,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
       const ey = Math.round(e.py / CELL);
       if (ex === knight.x && ey === knight.y){ gameOver(); return; }
 
-      // Remove off bottom
+      // Remove off bottom (safety)
       if (e.py > SIZE*CELL){
         e.el.remove();
         enemies.splice(i,1);
