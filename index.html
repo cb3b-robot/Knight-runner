@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Knight Runner</title>
+<title>Knight Runner — Stable Build</title>
 <style>
 :root{ --board:600px; --cell:calc(var(--board)/8); }
 *{box-sizing:border-box;}
@@ -34,7 +34,7 @@ button,input{font-size:16px}
 #game.shake{animation:shake .35s ease;}
 @keyframes shake{0%,100%{transform:translate3d(0,0,0)}20%{transform:translate3d(-6px,0,0)}40%{transform:translate3d(6px,0,0)}60%{transform:translate3d(-4px,0,0)}80%{transform:translate3d(4px,0,0)}}
 
-/* Board squares */
+/* Board */
 .square{position:absolute;width:var(--cell);height:var(--cell);}
 .light{background:#f0d9b5;}
 .dark{background:#b58863;}
@@ -51,7 +51,7 @@ button,input{font-size:16px}
   transition:left .18s cubic-bezier(.2,.7,.2,1), top .18s cubic-bezier(.2,.7,.2,1), filter .2s ease;
 }
 .knight.danger{filter:drop-shadow(0 0 10px #e74c3c)}
-.enemy{z-index:90;color:#111;font-size:calc(var(--cell)*0.66);filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));}
+.enemy{z-index:90;color:#000;font-size:calc(var(--cell)*0.66);filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));}
 
 /* Power-ups */
 .power{position:absolute;z-index:80;width:var(--cell);height:var(--cell);display:flex;align-items:center;justify-content:center;pointer-events:none;}
@@ -82,7 +82,7 @@ button,input{font-size:16px}
 #saveBtn{padding:8px 12px;border-radius:8px;border:1px solid #2ecc71;background:#2ecc71;color:#111;font-weight:700;cursor:pointer;}
 #saveBtn[disabled]{opacity:.6;cursor:not-allowed}
 
-/* Leaderboard panel (local) */
+/* Leaderboard */
 #leaderboard{
   width:min(var(--board), 95vw);
   background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;
@@ -166,7 +166,7 @@ button,input{font-size:16px}
 
   const SIZE = 8;
   const CELL = () => parseFloat(getComputedStyle(root).getPropertyValue('--cell'));
-  const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; // ♞ is filled; we paint it white
+  const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
 
   /* ===== Audio (SFX + Music) ===== */
   const MUTE_KEY = 'KR_mute';
@@ -304,12 +304,12 @@ button,input{font-size:16px}
     }
   });
 
-  /* ===== Game state ===== */
+  /* ===== Game state (single source of truth) ===== */
   let running = true;
   let speedMult = 1.0;
   let slowFactor = 1.0;
-  let enemies = [];
-  let powerups = [];
+  let enemies = [];     // <— declared once here
+  let powerups = [];    // <— declared once here
   let shield = 0;
   let speedMoves = 0;
   let slowUntil = 0;
@@ -318,7 +318,7 @@ button,input{font-size:16px}
   let startTime = performance.now();
   let lastTime  = startTime;
 
-  /* ===== Build board ===== */
+  /* ===== Board ===== */
   for (let y=0;y<SIZE;y++){
     for (let x=0;x<SIZE;x++){
       const sq = document.createElement('div');
@@ -392,20 +392,8 @@ button,input{font-size:16px}
       guide.appendChild(line);
     }
   }
-  const resizeObserver = new ResizeObserver(() => {
-    guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
-    const squares = document.querySelectorAll('.square');
-    squares.forEach((sq, i) => {
-      const x = i % SIZE, y = (i/ SIZE)|0;
-      sq.style.left = `${x*CELL()}px`;
-      sq.style.top  = `${y*CELL()}px`;
-    });
-    knightEl.style.left = `${knight.x*CELL()}px`;
-    knightEl.style.top  = `${knight.y*CELL()}px`;
-  });
-  resizeObserver.observe(game);
 
-  /* ===== Knight move dots (always visible) ===== */
+  /* ===== Knight move dots ===== */
   const knightOffsets = [
     {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
     {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
@@ -428,7 +416,6 @@ button,input{font-size:16px}
   /* ===== Power-ups ===== */
   const POWER_TYPES = ['shield','speed','slow','clear'];
   const POWER_GLYPH = { shield:'🛡', speed:'⚡', slow:'🕒', clear:'💥' };
-  let powerups = [];
   function spawnPowerUp(){
     let tries=20;
     while(tries-- >0){
@@ -477,7 +464,6 @@ button,input{font-size:16px}
 
   /* ===== Enemies ===== */
   const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 }; // cells/sec
-  let enemies = [];
   function spawnEnemy(){
     const r=Math.random();
     let type = (r>0.85)?'queen' : (r>0.65)?'rook' : (r>0.40)?'bishop' : 'pawn';
@@ -511,7 +497,7 @@ button,input{font-size:16px}
     e.btx=nx; e.bty=ny;
   }
 
-  /* ===== Difficulty / spawn ===== */
+  /* ===== Difficulty & spawn ===== */
   const baseSpawnDelay=1500;
   function scheduleSpawn(){
     const next=Math.max(60, baseSpawnDelay / (speedMult*(slowFactor||1)));
@@ -540,6 +526,7 @@ button,input{font-size:16px}
   }
   function moveEnemiesSmooth(dt){
     const dtSec=dt/1000, nowT=performance.now();
+    // expire powerups
     for (let i=powerups.length-1;i>=0;i--){
       if (nowT>powerups[i].expiresAt){ powerups[i].el.classList.add('fade'); setTimeout(()=>powerups[i].el.remove(),450); powerups.splice(i,1); }
     }
@@ -551,16 +538,15 @@ button,input{font-size:16px}
       const e=enemies[i];
       if (e.type==='queen'){
         const speedPx=e.stepSpeed*CELL()*mult;
-        const dx=e.qtpX-e.px, dy=e.qtpY-e.px? (e.qtpY-e.py) : 0; // guard
-        const realDy=e.qtpY-e.py;
-        const dist=Math.hypot(e.qtpX-e.px, realDy); const step=speedPx*dtSec;
+        const dx=e.qtpX-e.px, dy=e.qtpY-e.py;         // ✅ correct dy
+        const dist=Math.hypot(dx,dy); const step=speedPx*dtSec;
         if (dist<=step || dist===0){
           e.px=e.qtpX; e.py=e.qtpY; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
           e.qx=e.qtx; e.qy=e.qty;
           if (e.qy>=SIZE){ e.el.remove(); enemies.splice(i,1); continue; }
           pickNextQueenTarget(e); e.qtpX=e.qtx*CELL(); e.qtpY=e.qty*CELL();
         }else{
-          const ux=(e.qtpX-e.px)/dist, uy=(realDy)/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
+          const ux=dx/dist, uy=dy/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
         }
       } else if (e.type==='bishop'){
         const speedPx=e.stepSpeed*CELL()*mult;
