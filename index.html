@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Knight Runner — KR-2025-08-15-b</title>
+<title>Knight Runner — KR-2025-08-15-c</title>
 <style>
 :root{ --board:600px; --cell:calc(var(--board)/8); }
 *{box-sizing:border-box;}
@@ -137,19 +137,17 @@ button,input{font-size:16px}
   <ol id="lbList"></ol>
 </div>
 
-<!-- Error overlay (always loads first so it can catch errors) -->
+<!-- Error overlay (shows any JS errors on-screen) -->
 <div id="errorOverlay"><pre id="errorText"></pre></div>
 <script>
 (function(){
-  // Show any runtime/parse errors so we don't get a blank board.
   const overlay = document.getElementById('errorOverlay');
   const text = document.getElementById('errorText');
   function show(msg){
     overlay.style.display='flex';
-    text.textContent = 'JavaScript error:\n\n' + msg + '\n\n(Hard refresh after fixing)';
+    text.textContent = 'JavaScript error:\\n\\n' + msg + '\\n\\n(Hard refresh after fixing)';
   }
   window.addEventListener('error', (e)=>{
-    // Syntax and runtime errors in subsequent scripts will land here.
     const where = (e.filename ? ('\\n' + e.filename) : '') + (e.lineno? (':' + e.lineno) : '');
     show((e.message||'Unknown error') + where);
   });
@@ -334,8 +332,8 @@ button,input{font-size:16px}
   let running = true;
   let speedMult = 1.0;
   let slowFactor = 1.0;
-  let enemies = [];
-  let powerups = [];
+  let enemies = [];   // ✅ declared ONCE here
+  let powerups = [];  // ✅ declared ONCE here
   let shield = 0;
   let speedMoves = 0;
   let slowUntil = 0;
@@ -345,8 +343,9 @@ button,input{font-size:16px}
   let lastTime  = startTime;
 
   /* ===== Build board ===== */
-  for (let y=0;y<SIZE;y++){
-    for (let x=0;x<SIZE;x++){
+  const SIZE_CONST = 8;
+  for (let y=0;y<SIZE_CONST;y++){
+    for (let x=0;x<SIZE_CONST;x++){
       const sq = document.createElement('div');
       sq.className = 'square ' + ((x+y)%2 ? 'dark' : 'light');
       sq.style.left = `${x*CELL()}px`;
@@ -419,7 +418,7 @@ button,input{font-size:16px}
     }
   }
 
-  /* ===== Knight move dots ===== */
+  /* ===== Knight move dots (always visible) ===== */
   const knightOffsets = [
     {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
     {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
@@ -490,7 +489,6 @@ button,input{font-size:16px}
 
   /* ===== Enemies ===== */
   const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 }; // cells/sec
-  let enemies = [];
   function spawnEnemy(){
     const r=Math.random();
     let type = (r>0.85)?'queen' : (r>0.65)?'rook' : (r>0.40)?'bishop' : 'pawn';
@@ -565,7 +563,7 @@ button,input{font-size:16px}
       const e=enemies[i];
       if (e.type==='queen'){
         const speedPx=e.stepSpeed*CELL()*mult;
-        const dx=e.qtpX-e.px, dy=e.qtpY-e.py;     // correct dy
+        const dx=e.qtpX-e.px, dy=e.qtpY-e.py;
         const dist=Math.hypot(dx,dy); const step=speedPx*dtSec;
         if (dist<=step || dist===0){
           e.px=e.qtpX; e.py=e.qtpY; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
