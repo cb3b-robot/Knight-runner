@@ -28,17 +28,16 @@
     height: 600px;
     border: 4px solid #fff;
     border-radius: 10px;
-    background-color: #fff;
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    grid-template-rows: repeat(8, 1fr);
     overflow: hidden;
+    background-color: #fff;
   }
 
   /* Chessboard squares */
-  #game-container div.square {
-    width: 100%;
-    height: 100%;
+  .square {
+    width: 75px;
+    height: 75px;
+    position: absolute;
+    z-index: 1; /* behind everything */
   }
 
   /* Knight */
@@ -47,8 +46,8 @@
     height: 50px;
     background: url('https://upload.wikimedia.org/wikipedia/commons/2/28/Chess_nlt45.svg') no-repeat center/contain;
     position: absolute;
-    transition: top 0.2s, left 0.2s;
-    z-index: 10;
+    z-index: 100; /* always on top */
+    transition: top 0.1s, left 0.1s;
   }
 
   /* Obstacles */
@@ -57,7 +56,7 @@
     height: 50px;
     position: absolute;
     background: url('https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_pdt45.svg') no-repeat center/contain;
-    z-index: 5;
+    z-index: 50; /* above squares but below knight */
   }
 
   /* On-screen controls */
@@ -105,7 +104,7 @@
     color: #ff4c4c;
     display: none;
     text-shadow: 2px 2px 8px #000;
-    z-index: 15;
+    z-index: 200;
   }
 </style>
 </head>
@@ -134,6 +133,8 @@ for(let y=0;y<8;y++){
     const square = document.createElement('div');
     square.classList.add('square');
     square.style.backgroundColor = (x+y)%2===0 ? '#f0d9b5' : '#b58863';
+    square.style.left = `${x*75}px`;
+    square.style.top = `${y*75}px`;
     gameContainer.appendChild(square);
   }
 }
@@ -143,7 +144,7 @@ const knight = document.createElement('div');
 knight.classList.add('knight');
 gameContainer.appendChild(knight);
 
-// Game over
+// Game over text
 const gameOverText = document.createElement('div');
 gameOverText.id = 'game-over';
 gameOverText.textContent = 'Game Over!';
@@ -166,8 +167,8 @@ const knightMoves = {
 };
 
 function placeKnight() {
-  knight.style.left = `${knightPos.x * gridSize}px`;
-  knight.style.top = `${knightPos.y * gridSize}px`;
+  knight.style.left = `${knightPos.x * gridSize + 12.5}px`; // center in square
+  knight.style.top = `${knightPos.y * gridSize + 12.5}px`;
 }
 
 function addObstacle() {
@@ -175,10 +176,10 @@ function addObstacle() {
   obstacle.classList.add('obstacle');
 
   let posX = Math.floor(Math.random()*8);
-  obstacle.style.left = `${posX * gridSize}px`;
-  obstacle.style.top = `-75px`; // Start above the board
+  obstacle.style.left = `${posX * gridSize + 12.5}px`;
+  obstacle.style.top = `-50px`; // above board
   gameContainer.appendChild(obstacle);
-  obstacles.push({el: obstacle, x: posX, y: -1});
+  obstacles.push({el: obstacle, x: posX, y: -0.5});
 }
 
 function moveObstacles() {
@@ -188,7 +189,7 @@ function moveObstacles() {
     if(Math.floor(o.y) === knightPos.y && o.x === knightPos.x){
       gameOver();
     }
-    if(o.y > 8){ // remove off-screen obstacles
+    if(o.y > 8){
       o.el.remove();
       obstacles.splice(index,1);
       score++;
