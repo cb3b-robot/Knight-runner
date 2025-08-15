@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Knight Runner — Knight Move Arrows</title>
+<title>Knight Runner — Smooth Enemies</title>
 <style>
 :root{--board:600px;--cell:75px;}
 *{box-sizing:border-box;}
@@ -17,7 +17,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
 .dark{background:#b58863;}
 .piece{position:absolute;width:var(--cell);height:var(--cell);display:flex;align-items:center;justify-content:center;pointer-events:none;user-select:none;}
 .knight{z-index:110;color:#fff;font-size:52px;text-shadow:0 2px 6px #0009;}
-.enemy{z-index:90;color:#111;font-size:50px;filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));}
+.enemy{z-index:90;color:#111;font-size:50px;filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));transition:left 0.3s linear, top 0.3s linear;}
 .dot{position:absolute;width:var(--cell);height:var(--cell);display:flex;align-items:center;justify-content:center;z-index:120;cursor:pointer;}
 .dot span{width:18px;height:18px;border-radius:50%;background:#2ecc71;box-shadow:0 0 0 3px #2ecc7144,0 2px 6px #0007;}
 .dot:active span{transform:scale(.92);}
@@ -58,18 +58,17 @@ const scoreEl = document.getElementById('score');
 const speedEl = document.getElementById('speed');
 const CELL = 75;
 const SIZE = 8;
-const GLYPHS = { knight:'♘', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
+const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
 
 let knight = {x:3,y:6};
 let enemies = [];
 let dots = [];
 let startTime = performance.now();
 let running = true;
-let baseEnemyMoveDelay = 700, baseSpawnDelay=900, minEnemyMoveDelay=220, minSpawnDelay=260;
+let baseEnemyMoveDelay = 1200, baseSpawnDelay=1500, minEnemyMoveDelay=400, minSpawnDelay=500;
 
-// Arrow keys first/second selection for knight L-move
-let arrowStep = 0; // 0=waiting first, 1=waiting second
-let firstArrow = null;
+// Arrow key 2-step input
+let arrowStep=0, firstArrow=null;
 
 // --- Chessboard ---
 for(let y=0;y<SIZE;y++){ for(let x=0;x<SIZE;x++){
@@ -96,9 +95,8 @@ game.appendChild(dot); dots.push(dot);
 function spawnEnemy(){ const r=Math.random(), types=['pawn','rook','bishop','queen']; let type='pawn';
 if(r>0.85) type='queen'; else if(r>0.65) type='rook'; else if(r>0.4) type='bishop';
 const x=Math.floor(Math.random()*SIZE), y=-1; const el=document.createElement('div'); el.className='piece enemy';
-el.textContent=GLYPHS[type]; el.style.color='#111'; game.appendChild(el);
-let dx=0,dy=1,extra={}; if(type==='bishop'){ dx=Math.random()<0.5?-1:1; dy=1; }
-if(type==='queen'){ extra.diagChance=0.5; extra.doubleChance=0.33; }
+el.textContent=GLYPHS[type]; game.appendChild(el); let dx=0,dy=1,extra={};
+if(type==='bishop'){ dx=Math.random()<0.5?-1:1; dy=1; } if(type==='queen'){ extra.diagChance=0.5; extra.doubleChance=0.33; }
 enemies.push({el,x,y,type,dx,dy,extra}); placeEnemy(enemies[enemies.length-1]); }
 function placeEnemy(e){ e.el.style.left=`${e.x*CELL}px`; e.el.style.top=`${e.y*CELL}px`; }
 function moveEnemies(){ for(let i=enemies.length-1;i>=0;i--){ const e=enemies[i]; const moves=(e.type==='queen'&&Math.random()<e.extra.doubleChance)?2:1;
@@ -122,24 +120,26 @@ running=true; startTime=performance.now(); arrowStep=0; firstArrow=null; knight=
 }
 
 // --- Loops / timers ---
-let enemyMoveDelay=baseEnemyMoveDelay, spawnDelay=baseSpawnDelay;
 let enemyMoveTimer, spawnTimer, scoreTimer, difficultyTimer;
+let enemyMoveDelay=baseEnemyMoveDelay, spawnDelay=baseSpawnDelay;
 function scheduleEnemyMove(){ enemyMoveTimer=setTimeout(function tick(){ if(!running) return; moveEnemies(); scheduleEnemyMove(); }, enemyMoveDelay); }
 function scheduleSpawn(){ spawnTimer=setTimeout(function tick(){ if(!running) return; spawnEnemy(); scheduleSpawn(); }, spawnDelay); }
 function scheduleScore(){ scoreTimer=setInterval(()=>{ if(!running) return; scoreEl.textContent=((performance.now()-startTime)/1000).toFixed(1); },100); }
-function scheduleDifficulty(){ difficultyTimer=setInterval(()=>{ if(!running) return; enemyMoveDelay=Math.max(220,enemyMoveDelay-50); spawnDelay=Math.max(260,spawnDelay-60); speedEl.textContent=(baseEnemyMoveDelay/enemyMoveDelay).toFixed(1)+'×'; clearTimeout(enemyMoveTimer); clearTimeout(spawnTimer); scheduleEnemyMove(); scheduleSpawn(); },6000); }
+function scheduleDifficulty(){ difficultyTimer=setInterval(()=>{ if(!running) return;
+enemyMoveDelay = Math.max(minEnemyMoveDelay, enemyMoveDelay - 20);
+spawnDelay = Math.max(minSpawnDelay, spawnDelay - 25);
+speedEl.textContent = (baseEnemyMoveDelay/enemyMoveDelay).toFixed(1)+'×';
+clearTimeout(enemyMoveTimer); clearTimeout(spawnTimer); scheduleEnemyMove(); scheduleSpawn();
+},6000); }
 
 // --- Arrow key knight logic ---
 const DIRS={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
 function processArrow(dir){
   if(arrowStep===0){ firstArrow=dir; arrowStep=1; return; }
-  // second arrow
-  const dx=firstArrow.x*2, dy=firstArrow.y*2;
-  let tx=knight.x, ty=knight.y;
-  // Determine perpendicular short move
+  const dx=firstArrow.x*2, dy=firstArrow.y*2; let tx=knight.x, ty=knight.y;
   if(firstArrow.x!==0 && dir.y!==0){ tx+=dx; ty+=dir.y; }
   else if(firstArrow.y!==0 && dir.x!==0){ tx+=dir.x; ty+=dy; }
-  else if(firstArrow.x=== -dir.x && firstArrow.y=== -dir.y){ arrowStep=0; firstArrow=null; return; } // cancel
+  else if(firstArrow.x=== -dir.x && firstArrow.y=== -dir.y){ arrowStep=0; firstArrow=null; return; }
   else{ arrowStep=0; firstArrow=null; return; }
   if(tx<0||tx>=SIZE||ty<0||ty>=SIZE){ arrowStep=0; firstArrow=null; return; }
   knight.x=tx; knight.y=ty; placeKnight(); checkCollision(); updateDots(); arrowStep=0; firstArrow=null;
