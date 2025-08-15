@@ -48,7 +48,7 @@
     background: url('https://upload.wikimedia.org/wikipedia/commons/2/28/Chess_nlt45.svg') no-repeat center/contain;
     position: absolute;
     transition: top 0.2s, left 0.2s;
-    z-index: 10; /* Make sure knight is on top */
+    z-index: 10;
   }
 
   /* Obstacles */
@@ -57,7 +57,7 @@
     height: 50px;
     position: absolute;
     background: url('https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_pdt45.svg') no-repeat center/contain;
-    z-index: 5; /* Obstacles above squares but below knight */
+    z-index: 5;
   }
 
   /* On-screen controls */
@@ -105,7 +105,7 @@
     color: #ff4c4c;
     display: none;
     text-shadow: 2px 2px 8px #000;
-    z-index: 15; /* Ensure game over text is on top */
+    z-index: 15;
   }
 </style>
 </head>
@@ -128,7 +128,7 @@
 const gameContainer = document.getElementById('game-container');
 const scoreDisplay = document.getElementById('score');
 
-// Create chessboard squares
+// Chessboard squares
 for(let y=0;y<8;y++){
   for(let x=0;x<8;x++){
     const square = document.createElement('div');
@@ -138,12 +138,12 @@ for(let y=0;y<8;y++){
   }
 }
 
-// Create knight
+// Knight
 const knight = document.createElement('div');
 knight.classList.add('knight');
 gameContainer.appendChild(knight);
 
-// Game over text
+// Game over
 const gameOverText = document.createElement('div');
 gameOverText.id = 'game-over';
 gameOverText.textContent = 'Game Over!';
@@ -174,20 +174,27 @@ function addObstacle() {
   const obstacle = document.createElement('div');
   obstacle.classList.add('obstacle');
 
-  let pos;
-  do {
-    pos = {x: Math.floor(Math.random()*8), y: Math.floor(Math.random()*8)};
-  } while ((pos.x === knightPos.x && pos.y === knightPos.y) || obstacles.some(o=>o.x===pos.x && o.y===pos.y));
-
-  obstacle.style.left = `${pos.x * gridSize}px`;
-  obstacle.style.top = `${pos.y * gridSize}px`;
-
+  let posX = Math.floor(Math.random()*8);
+  obstacle.style.left = `${posX * gridSize}px`;
+  obstacle.style.top = `-75px`; // Start above the board
   gameContainer.appendChild(obstacle);
-  obstacles.push({el: obstacle, ...pos});
+  obstacles.push({el: obstacle, x: posX, y: -1});
 }
 
-function checkCollision() {
-  return obstacles.some(o => o.x === knightPos.x && o.y === knightPos.y);
+function moveObstacles() {
+  obstacles.forEach((o, index) => {
+    o.y += 0.05; // speed
+    o.el.style.top = `${o.y * gridSize}px`;
+    if(Math.floor(o.y) === knightPos.y && o.x === knightPos.x){
+      gameOver();
+    }
+    if(o.y > 8){ // remove off-screen obstacles
+      o.el.remove();
+      obstacles.splice(index,1);
+      score++;
+      scoreDisplay.textContent = `Score: ${score}`;
+    }
+  });
 }
 
 function gameOver() {
@@ -209,12 +216,6 @@ function moveKnight(direction) {
     knightPos.y += moves[1].y;
     constrainPosition();
     placeKnight();
-
-    if (checkCollision()) gameOver();
-    else {
-      score++;
-      scoreDisplay.textContent = `Score: ${score}`;
-    }
   }, 100);
 }
 
@@ -225,7 +226,7 @@ function constrainPosition() {
   if(knightPos.y>7) knightPos.y=7;
 }
 
-// Keyboard controls
+// Keyboard
 document.addEventListener('keydown', e => {
   switch(e.key){
     case "ArrowUp": moveKnight("up-left"); break;
@@ -240,11 +241,11 @@ document.querySelectorAll('.osd-button').forEach(btn=>{
   btn.addEventListener('click', ()=>moveKnight(btn.dataset.dir));
 });
 
-// Obstacles every 2s
+// Game loop
 let gameInterval = setInterval(()=>{
   addObstacle();
-  if(checkCollision()) gameOver();
-},2000);
+  moveObstacles();
+},20);
 
 placeKnight();
 </script>
