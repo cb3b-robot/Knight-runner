@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Knight Runner — KR-2025-08-15-c</title>
+<title>Knight Runner — KR-2025-08-15-d</title>
 <style>
 :root{ --board:600px; --cell:calc(var(--board)/8); }
 *{box-sizing:border-box;}
@@ -145,10 +145,10 @@ button,input{font-size:16px}
   const text = document.getElementById('errorText');
   function show(msg){
     overlay.style.display='flex';
-    text.textContent = 'JavaScript error:\\n\\n' + msg + '\\n\\n(Hard refresh after fixing)';
+    text.textContent = 'JavaScript error:\n\n' + msg + '\n\n(Hard refresh after fixing)';
   }
   window.addEventListener('error', (e)=>{
-    const where = (e.filename ? ('\\n' + e.filename) : '') + (e.lineno? (':' + e.lineno) : '');
+    const where = (e.filename ? ('\n' + e.filename) : '') + (e.lineno? (':' + e.lineno) : '');
     show((e.message||'Unknown error') + where);
   });
   window.addEventListener('unhandledrejection', (e)=>{
@@ -190,7 +190,7 @@ button,input{font-size:16px}
   /* ===== Constants ===== */
   const SIZE = 8;
   const CELL = () => parseFloat(getComputedStyle(root).getPropertyValue('--cell'));
-  const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
+  const GLYPHS = { knight:'♘', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; /* white knight */
 
   /* ===== Audio (SFX + Music) ===== */
   const MUTE_KEY = 'KR_mute';
@@ -332,8 +332,8 @@ button,input{font-size:16px}
   let running = true;
   let speedMult = 1.0;
   let slowFactor = 1.0;
-  let enemies = [];   // ✅ declared ONCE here
-  let powerups = [];  // ✅ declared ONCE here
+  let enemies = [];   // declared ONCE
+  let powerups = [];  // declared ONCE
   let shield = 0;
   let speedMoves = 0;
   let slowUntil = 0;
@@ -343,9 +343,8 @@ button,input{font-size:16px}
   let lastTime  = startTime;
 
   /* ===== Build board ===== */
-  const SIZE_CONST = 8;
-  for (let y=0;y<SIZE_CONST;y++){
-    for (let x=0;x<SIZE_CONST;x++){
+  for (let y=0;y<SIZE;y++){
+    for (let x=0;x<SIZE;x++){
       const sq = document.createElement('div');
       sq.className = 'square ' + ((x+y)%2 ? 'dark' : 'light');
       sq.style.left = `${x*CELL()}px`;
@@ -553,7 +552,7 @@ button,input{font-size:16px}
     const dtSec=dt/1000, nowT=performance.now();
     // expire powerups
     for (let i=powerups.length-1;i>=0;i--){
-      if (nowT>powerups[i].expiresAt){ powerups[i].el.classList.add('fade'); setTimeout(()=>powerups[i].el.remove(),450); powerups.splice(i,1); }
+      if (nowT>powerups[i].expiresAt){ powerups[i].el.classList.add('fade'); setTimeout(()=>p.el && p.el.remove(),450); powerups.splice(i,1); }
     }
     if (slowUntil && nowT>slowUntil){ slowUntil=0; slowFactor=1.0; bSlow.classList.remove('active'); }
     speedEl.textContent = `${(speedMult*(slowFactor||1)).toFixed(1)}×`;
@@ -647,7 +646,9 @@ button,input{font-size:16px}
   document.addEventListener('keydown', (e)=>{
     if (!running) return;
     const k=e.key.replace('Arrow','').toLowerCase();
-    const dir=DIRS[k]; if (!dir) return; processArrow(dir);
+    const dir=DIRS[k]; if (!dir) return;
+    e.preventDefault(); /* prevent scroll on Arrow keys */
+    processArrow(dir);
   });
 
   /* ===== Game over / restart ===== */
@@ -685,7 +686,7 @@ button,input{font-size:16px}
   }
   function restart(){
     enemies.forEach(e=>e.el.remove()); enemies=[];
-    powerups.forEach(p=>p.el.remove()); powerups=[];
+    powerups.forEach(p=>p.el && p.el.remove()); powerups=[];
     const over=document.getElementById('over'); if (over) over.remove();
     speedMult=1.0; slowFactor=1.0; slowUntil=0; shield=0; speedMoves=0;
     bShield.classList.remove('active'); bSpeed.classList.remove('active'); bSlow.classList.remove('active');
