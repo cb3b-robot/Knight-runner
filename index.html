@@ -48,6 +48,7 @@
     background: url('https://upload.wikimedia.org/wikipedia/commons/2/28/Chess_nlt45.svg') no-repeat center/contain;
     position: absolute;
     transition: top 0.2s, left 0.2s;
+    z-index: 10; /* Make sure knight is on top */
   }
 
   /* Obstacles */
@@ -56,6 +57,7 @@
     height: 50px;
     position: absolute;
     background: url('https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_pdt45.svg') no-repeat center/contain;
+    z-index: 5; /* Obstacles above squares but below knight */
   }
 
   /* On-screen controls */
@@ -103,6 +105,7 @@
     color: #ff4c4c;
     display: none;
     text-shadow: 2px 2px 8px #000;
+    z-index: 15; /* Ensure game over text is on top */
   }
 </style>
 </head>
@@ -124,17 +127,30 @@
 <script>
 const gameContainer = document.getElementById('game-container');
 const scoreDisplay = document.getElementById('score');
+
+// Create chessboard squares
+for(let y=0;y<8;y++){
+  for(let x=0;x<8;x++){
+    const square = document.createElement('div');
+    square.classList.add('square');
+    square.style.backgroundColor = (x+y)%2===0 ? '#f0d9b5' : '#b58863';
+    gameContainer.appendChild(square);
+  }
+}
+
+// Create knight
 const knight = document.createElement('div');
 knight.classList.add('knight');
 gameContainer.appendChild(knight);
 
+// Game over text
 const gameOverText = document.createElement('div');
 gameOverText.id = 'game-over';
 gameOverText.textContent = 'Game Over!';
 gameContainer.appendChild(gameOverText);
 
-const gridSize = 75; // Chessboard 8x8 in 600px container
-let knightPos = { x: 4, y: 4 }; // center
+const gridSize = 75;
+let knightPos = { x: 4, y: 4 };
 let score = 0;
 let obstacles = [];
 
@@ -148,16 +164,6 @@ const knightMoves = {
   "left-down": [{x:-1,y:2},{x:-2,y:1}],
   "left-up": [{x:-1,y:-2},{x:-2,y:-1}]
 };
-
-// Create chessboard squares
-for(let y=0;y<8;y++){
-  for(let x=0;x<8;x++){
-    const square = document.createElement('div');
-    square.classList.add('square');
-    square.style.backgroundColor = (x+y)%2===0 ? '#f0d9b5' : '#b58863'; // light/dark
-    gameContainer.appendChild(square);
-  }
-}
 
 function placeKnight() {
   knight.style.left = `${knightPos.x * gridSize}px`;
