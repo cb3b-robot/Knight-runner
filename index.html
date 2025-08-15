@@ -5,113 +5,73 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Knight Runner</title>
 <style>
-  body {
-    margin: 0;
-    font-family: 'Arial', sans-serif;
-    background: #222;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    color: #fff;
-    overflow: hidden;
-  }
+body {
+  margin:0;
+  background:#222;
+  font-family:Arial, sans-serif;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  color:#fff;
+}
 
-  h1 {
-    margin: 10px;
-    font-size: 2em;
-    text-shadow: 2px 2px 8px #000;
-  }
+h1 { margin:10px; text-shadow:2px2px8px #000; }
 
-  #game-container {
-    position: relative;
-    width: 600px;
-    height: 600px;
-    border: 4px solid #fff;
-    border-radius: 10px;
-    overflow: hidden;
-    background-color: #fff;
-  }
+#game-container {
+  position: relative;
+  width: 600px;
+  height: 600px;
+  border: 4px solid #fff;
+  border-radius: 10px;
+  background-image:
+    linear-gradient(45deg, #f0d9b5 25%, transparent 25%),
+    linear-gradient(-45deg, #f0d9b5 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #b58863 75%),
+    linear-gradient(-45deg, transparent 75%, #b58863 75%);
+  background-size: 75px 75px;
+  background-position: 0 0, 0 37.5px, 37.5px -37.5px, -37.5px 0px;
+  overflow: hidden;
+}
 
-  /* Chessboard squares */
-  .square {
-    width: 75px;
-    height: 75px;
-    position: absolute;
-    z-index: 1; /* behind everything */
-  }
+.knight {
+  width:50px;
+  height:50px;
+  background:url('https://upload.wikimedia.org/wikipedia/commons/2/28/Chess_nlt45.svg') no-repeat center/contain;
+  position:absolute;
+  z-index:100;
+  transition:top 0.1s,left 0.1s;
+}
 
-  /* Knight */
-  .knight {
-    width: 50px;
-    height: 50px;
-    background: url('https://upload.wikimedia.org/wikipedia/commons/2/28/Chess_nlt45.svg') no-repeat center/contain;
-    position: absolute;
-    z-index: 100; /* always on top */
-    transition: top 0.1s, left 0.1s;
-  }
+.obstacle {
+  width:50px;
+  height:50px;
+  position:absolute;
+  background:url('https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_pdt45.svg') no-repeat center/contain;
+  z-index:50;
+}
 
-  /* Obstacles */
-  .obstacle {
-    width: 50px;
-    height: 50px;
-    position: absolute;
-    background: url('https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_pdt45.svg') no-repeat center/contain;
-    z-index: 50; /* above squares but below knight */
-  }
+#osd-controls { margin-top:10px; display:flex; flex-wrap:wrap; width:250px; justify-content:center; gap:5px; }
 
-  /* On-screen controls */
-  #osd-controls {
-    margin-top: 10px;
-    display: flex;
-    flex-wrap: wrap;
-    width: 250px;
-    justify-content: center;
-    gap: 5px;
-  }
+.osd-button {
+  width:60px; height:60px; background:#fff; color:#000; font-weight:bold;
+  font-size:1.2em; display:flex; justify-content:center; align-items:center;
+  border-radius:10px; cursor:pointer; user-select:none; box-shadow:2px2px6px #000;
+}
 
-  .osd-button {
-    width: 60px;
-    height: 60px;
-    background: #fff;
-    border-radius: 10px;
-    color: #000;
-    font-weight: bold;
-    font-size: 1.2em;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    user-select: none;
-    box-shadow: 2px 2px 6px #000;
-    transition: 0.1s;
-  }
+.osd-button:active { transform:scale(0.95); }
 
-  .osd-button:active {
-    transform: scale(0.95);
-  }
+#score { margin-top:10px; font-size:1.2em; }
 
-  #score {
-    margin-top: 10px;
-    font-size: 1.2em;
-  }
-
-  #game-over {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 2em;
-    color: #ff4c4c;
-    display: none;
-    text-shadow: 2px 2px 8px #000;
-    z-index: 200;
-  }
+#game-over {
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  font-size:2em; color:#ff4c4c; display:none; text-shadow:2px2px8px #000; z-index:200;
+}
 </style>
 </head>
 <body>
 <h1>Knight Runner</h1>
 <div id="game-container"></div>
-<div id="score">Score: 0</div>
+<div id="score">Score:0</div>
 <div id="osd-controls">
   <div class="osd-button" data-dir="up-left">UL</div>
   <div class="osd-button" data-dir="up-right">UR</div>
@@ -124,111 +84,79 @@
 </div>
 
 <script>
-const gameContainer = document.getElementById('game-container');
+const container = document.getElementById('game-container');
 const scoreDisplay = document.getElementById('score');
-
-// Chessboard squares
-for(let y=0;y<8;y++){
-  for(let x=0;x<8;x++){
-    const square = document.createElement('div');
-    square.classList.add('square');
-    square.style.backgroundColor = (x+y)%2===0 ? '#f0d9b5' : '#b58863';
-    square.style.left = `${x*75}px`;
-    square.style.top = `${y*75}px`;
-    gameContainer.appendChild(square);
-  }
-}
 
 // Knight
 const knight = document.createElement('div');
 knight.classList.add('knight');
-gameContainer.appendChild(knight);
+container.appendChild(knight);
 
 // Game over text
 const gameOverText = document.createElement('div');
-gameOverText.id = 'game-over';
-gameOverText.textContent = 'Game Over!';
-gameContainer.appendChild(gameOverText);
+gameOverText.id='game-over';
+gameOverText.textContent='Game Over!';
+container.appendChild(gameOverText);
 
-const gridSize = 75;
-let knightPos = { x: 4, y: 4 };
-let score = 0;
-let obstacles = [];
+const gridSize=75;
+let knightPos={x:4,y:4};
+let score=0;
+let obstacles=[];
 
-const knightMoves = {
-  "up-left": [{x:-2,y:-1},{x:-1,y:-2}],
-  "up-right": [{x:2,y:-1},{x:1,y:-2}],
-  "right-up": [{x:1,y:-2},{x:2,y:-1}],
-  "right-down": [{x:1,y:2},{x:2,y:1}],
-  "down-right": [{x:2,y:1},{x:1,y:2}],
-  "down-left": [{x:-2,y:1},{x:-1,y:2}],
-  "left-down": [{x:-1,y:2},{x:-2,y:1}],
-  "left-up": [{x:-1,y:-2},{x:-2,y:-1}]
+const knightMoves={
+"up-left":[{x:-2,y:-1},{x:-1,y:-2}],
+"up-right":[{x:2,y:-1},{x:1,y:-2}],
+"right-up":[{x:1,y:-2},{x:2,y:-1}],
+"right-down":[{x:1,y:2},{x:2,y:1}],
+"down-right":[{x:2,y:1},{x:1,y:2}],
+"down-left":[{x:-2,y:1},{x:-1,y:2}],
+"left-down":[{x:-1,y:2},{x:-2,y:1}],
+"left-up":[{x:-1,y:-2},{x:-2,y:-1}]
 };
 
-function placeKnight() {
-  knight.style.left = `${knightPos.x * gridSize + 12.5}px`; // center in square
-  knight.style.top = `${knightPos.y * gridSize + 12.5}px`;
+function placeKnight(){
+  knight.style.left=`${knightPos.x*gridSize + 12.5}px`;
+  knight.style.top=`${knightPos.y*gridSize + 12.5}px`;
 }
 
-function addObstacle() {
-  const obstacle = document.createElement('div');
-  obstacle.classList.add('obstacle');
-
-  let posX = Math.floor(Math.random()*8);
-  obstacle.style.left = `${posX * gridSize + 12.5}px`;
-  obstacle.style.top = `-50px`; // above board
-  gameContainer.appendChild(obstacle);
-  obstacles.push({el: obstacle, x: posX, y: -0.5});
+function addObstacle(){
+  const obs=document.createElement('div');
+  obs.classList.add('obstacle');
+  let posX=Math.floor(Math.random()*8);
+  obs.style.left=`${posX*gridSize +12.5}px`;
+  obs.style.top=`-50px`;
+  container.appendChild(obs);
+  obstacles.push({el:obs,x:posX,y:-0.5});
 }
 
-function moveObstacles() {
-  obstacles.forEach((o, index) => {
-    o.y += 0.05; // speed
-    o.el.style.top = `${o.y * gridSize}px`;
-    if(Math.floor(o.y) === knightPos.y && o.x === knightPos.x){
-      gameOver();
-    }
-    if(o.y > 8){
-      o.el.remove();
-      obstacles.splice(index,1);
-      score++;
-      scoreDisplay.textContent = `Score: ${score}`;
-    }
+function moveObstacles(){
+  obstacles.forEach((o,index)=>{
+    o.y+=0.05;
+    o.el.style.top=`${o.y*gridSize}px`;
+    if(Math.floor(o.y)===knightPos.y && o.x===knightPos.x){gameOver();}
+    if(o.y>8){ o.el.remove(); obstacles.splice(index,1); score++; scoreDisplay.textContent=`Score:${score}`; }
   });
 }
 
-function gameOver() {
-  clearInterval(gameInterval);
-  gameOverText.style.display = 'block';
+function moveKnight(dir){
+  const moves=knightMoves[dir];
+  if(!moves) return;
+  knightPos.x+=moves[0].x; knightPos.y+=moves[0].y;
+  constrainPosition(); placeKnight();
+  setTimeout(()=>{ knightPos.x+=moves[1].x; knightPos.y+=moves[1].y; constrainPosition(); placeKnight(); },100);
 }
 
-function moveKnight(direction) {
-  const moves = knightMoves[direction];
-  if (!moves) return;
-
-  knightPos.x += moves[0].x;
-  knightPos.y += moves[0].y;
-  constrainPosition();
-  placeKnight();
-
-  setTimeout(() => {
-    knightPos.x += moves[1].x;
-    knightPos.y += moves[1].y;
-    constrainPosition();
-    placeKnight();
-  }, 100);
-}
-
-function constrainPosition() {
+function constrainPosition(){
   if(knightPos.x<0) knightPos.x=0;
   if(knightPos.y<0) knightPos.y=0;
   if(knightPos.x>7) knightPos.x=7;
   if(knightPos.y>7) knightPos.y=7;
 }
 
+function gameOver(){ clearInterval(gameInterval); gameOverText.style.display='block'; }
+
 // Keyboard
-document.addEventListener('keydown', e => {
+document.addEventListener('keydown',e=>{
   switch(e.key){
     case "ArrowUp": moveKnight("up-left"); break;
     case "ArrowDown": moveKnight("down-right"); break;
@@ -237,16 +165,10 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// On-screen buttons
-document.querySelectorAll('.osd-button').forEach(btn=>{
-  btn.addEventListener('click', ()=>moveKnight(btn.dataset.dir));
-});
+// OSD buttons
+document.querySelectorAll('.osd-button').forEach(btn=>{btn.addEventListener('click',()=>moveKnight(btn.dataset.dir));});
 
-// Game loop
-let gameInterval = setInterval(()=>{
-  addObstacle();
-  moveObstacles();
-},20);
+let gameInterval=setInterval(()=>{ addObstacle(); moveObstacles(); },20);
 
 placeKnight();
 </script>
