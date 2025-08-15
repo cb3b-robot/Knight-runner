@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Knight Runner — Clean Build</title>
+<title>Knight Runner</title>
 <style>
 :root{ --board:600px; --cell:calc(var(--board)/8); }
 *{box-sizing:border-box;}
@@ -152,9 +152,7 @@ button,input{font-size:16px}
   }
   window.addEventListener('resize', setBoardSize, {passive:true});
   window.addEventListener('orientationchange', () => setTimeout(setBoardSize, 120), {passive:true});
-  setBoardSize();
-  setTimeout(setBoardSize, 200);
-  setTimeout(setBoardSize, 800);
+  setBoardSize(); setTimeout(setBoardSize, 200); setTimeout(setBoardSize, 800);
 
   /* ===== Helpers & constants ===== */
   const scoreEl = document.getElementById('score');
@@ -168,7 +166,7 @@ button,input{font-size:16px}
 
   const SIZE = 8;
   const CELL = () => parseFloat(getComputedStyle(root).getPropertyValue('--cell'));
-  const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; // knight uses filled glyph
+  const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; // ♞ is filled; we paint it white
 
   /* ===== Audio (SFX + Music) ===== */
   const MUTE_KEY = 'KR_mute';
@@ -250,7 +248,7 @@ button,input{font-size:16px}
       const t=now(); const bar=Math.floor(step/4); const root=roots[Math.floor(bar%roots.length)];
       if (step%4===0){ playPad({freq:mtof(root),when:t+0.01,dur=3.8}); playPad({freq:mtof(root+7),when:t+0.01,dur=3.8,gain:0.08}); }
       const intv=arpPattern[step%arpPattern.length];
-      playNote({freq:mtof(root+intv),when:t+0.02,dur=0.24,type='triangle',gain:0.18});
+      playNote({freq:mtof(root+intv),when:t+0.02,dur=0.24,type:'triangle',gain:0.18});
       step++;
     }
     function start(){ init(); if (playing) return; playing=true; tick(); timer=setInterval(()=>tick(), stepDur*1000); }
@@ -407,7 +405,7 @@ button,input{font-size:16px}
   });
   resizeObserver.observe(game);
 
-  /* ===== Knight dots ===== */
+  /* ===== Knight move dots (always visible) ===== */
   const knightOffsets = [
     {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
     {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
@@ -430,6 +428,7 @@ button,input{font-size:16px}
   /* ===== Power-ups ===== */
   const POWER_TYPES = ['shield','speed','slow','clear'];
   const POWER_GLYPH = { shield:'🛡', speed:'⚡', slow:'🕒', clear:'💥' };
+  let powerups = [];
   function spawnPowerUp(){
     let tries=20;
     while(tries-- >0){
@@ -478,6 +477,7 @@ button,input{font-size:16px}
 
   /* ===== Enemies ===== */
   const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 }; // cells/sec
+  let enemies = [];
   function spawnEnemy(){
     const r=Math.random();
     let type = (r>0.85)?'queen' : (r>0.65)?'rook' : (r>0.40)?'bishop' : 'pawn';
@@ -511,13 +511,13 @@ button,input{font-size:16px}
     e.btx=nx; e.bty=ny;
   }
 
-  /* ===== Difficulty / spawn (single source of truth) ===== */
+  /* ===== Difficulty / spawn ===== */
   const baseSpawnDelay=1500;
   function scheduleSpawn(){
     const next=Math.max(60, baseSpawnDelay / (speedMult*(slowFactor||1)));
     spawnTimer=setTimeout(function tick(){
       if (!running) return;
-      if (Math.random()<0.12) spawnPowerUp(); else spawnEnemy();
+      Math.random()<0.12 ? spawnPowerUp() : spawnEnemy();
       scheduleSpawn();
     }, next);
   }
@@ -551,14 +551,16 @@ button,input{font-size:16px}
       const e=enemies[i];
       if (e.type==='queen'){
         const speedPx=e.stepSpeed*CELL()*mult;
-        const dx=e.qtpX-e.px, dy=e.qtpY-e.py; const dist=Math.hypot(dx,dy); const step=speedPx*dtSec;
+        const dx=e.qtpX-e.px, dy=e.qtpY-e.px? (e.qtpY-e.py) : 0; // guard
+        const realDy=e.qtpY-e.py;
+        const dist=Math.hypot(e.qtpX-e.px, realDy); const step=speedPx*dtSec;
         if (dist<=step || dist===0){
           e.px=e.qtpX; e.py=e.qtpY; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
           e.qx=e.qtx; e.qy=e.qty;
           if (e.qy>=SIZE){ e.el.remove(); enemies.splice(i,1); continue; }
           pickNextQueenTarget(e); e.qtpX=e.qtx*CELL(); e.qtpY=e.qty*CELL();
         }else{
-          const ux=dx/dist, uy=dy/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
+          const ux=(e.qtpX-e.px)/dist, uy=(realDy)/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
         }
       } else if (e.type==='bishop'){
         const speedPx=e.stepSpeed*CELL()*mult;
@@ -620,7 +622,6 @@ button,input{font-size:16px}
   /* ===== Arrow key two-step ===== */
   const DIRS = { up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
   let arrowStep=0, firstArrow=null;
-  function clearGuide(){ while (guide.lastChild && guide.lastChild!==defs) guide.removeChild(guide.lastChild); }
   function processArrow(dir){
     if (arrowStep===0){ firstArrow=dir; arrowStep=1; drawFirstArrow(dir); return; }
     const dx2=firstArrow.x*2, dy2=firstArrow.y*2;
@@ -686,9 +687,18 @@ button,input{font-size:16px}
     SFX.restart(); Music.start();
   }
 
-  /* ===== Kickoff ===== */
+  /* ===== Start ===== */
   updateDots(); scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
   applyMuteUI();
+
+  /* ===== Resize sync ===== */
+  const ro = new ResizeObserver(() => {
+    const squares = document.querySelectorAll('.square');
+    squares.forEach((sq, i) => { const x=i%SIZE, y=(i/SIZE)|0; sq.style.left=`${x*CELL()}px`; sq.style.top=`${y*CELL()}px`; });
+    knightEl.style.left = `${knight.x*CELL()}px`; knightEl.style.top = `${knight.y*CELL()}px`;
+    guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
+  });
+  ro.observe(game);
 })();
 </script>
 </body>
