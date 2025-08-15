@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Knight Runner — KR-2025-08-15-d</title>
+<title>Knight Runner — KR-2025-08-15-e</title>
 <style>
 :root{ --board:600px; --cell:calc(var(--board)/8); }
 *{box-sizing:border-box;}
@@ -190,7 +190,7 @@ button,input{font-size:16px}
   /* ===== Constants ===== */
   const SIZE = 8;
   const CELL = () => parseFloat(getComputedStyle(root).getPropertyValue('--cell'));
-  const GLYPHS = { knight:'♘', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; /* white knight */
+  const GLYPHS = { knight:'♘', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
 
   /* ===== Audio (SFX + Music) ===== */
   const MUTE_KEY = 'KR_mute';
@@ -207,7 +207,19 @@ button,input{font-size:16px}
     audio.unlocked = true; Music.start();
   }
   function now(){ ensureAudio(); return audio.ctx.currentTime; }
-  function tone({freq=440, type='sine', dur=0.12, gain=0.05, attack=0.002, release=0.08, slideTo=null, slideTime=0.08}){
+
+  /* ---- SFX helpers (compat-friendly options pattern) ---- */
+  function tone(opts){
+    opts = opts || {};
+    const freq = (opts.freq==null)?440:opts.freq;
+    const type = opts.type || 'sine';
+    const dur = (opts.dur==null)?0.12:opts.dur;
+    const gain = (opts.gain==null)?0.05:opts.gain;
+    const attack = (opts.attack==null)?0.002:opts.attack;
+    const release = (opts.release==null)?0.08:opts.release;
+    const slideTo = (opts.slideTo==null)?null:opts.slideTo;
+    const slideTime = (opts.slideTime==null)?0.08:opts.slideTime;
+
     if (!audio.enabled) return;
     ensureAudio();
     const t0 = now();
@@ -223,6 +235,7 @@ button,input{font-size:16px}
     osc.connect(f); f.connect(g); g.connect(audio.ctx.destination);
     osc.start(t0); osc.stop(t0+dur+release+0.02);
   }
+
   const SFX = {
     jump(){ tone({freq:600,type:'square',gain:0.04,attack:0.003,release:0.08, slideTo:760, slideTime:0.06}); },
     pickupShield(){ tone({freq:520,type:'triangle',gain:0.05,attack:0.004,release:0.12}); tone({freq:780,type:'triangle',gain:0.04,attack:0.004,release:0.12, slideTo:880, slideTime:0.08}); },
@@ -234,8 +247,10 @@ button,input{font-size:16px}
     gameOver(){ tone({freq:440,type:'sawtooth',gain:0.06,attack:0.004,release:0.25, slideTo:180, slideTime:0.25}); },
     restart(){ tone({freq:660,type:'triangle',gain:0.05,attack:0.003,release:0.12, slideTo:880, slideTime:0.08}); }
   };
+
   const Music = (() => {
     let master, padGain, arpGain, delay, feedback, lowpass, timer=null, step=0, playing=false;
+
     function init(){
       ensureAudio(); if (master) return;
       master = audio.ctx.createGain(); padGain = audio.ctx.createGain(); arpGain = audio.ctx.createGain();
@@ -248,8 +263,18 @@ button,input{font-size:16px}
       lowpass.connect(delay); delay.connect(feedback); feedback.connect(delay);
       delay.connect(master); lowpass.connect(master); master.connect(audio.ctx.destination);
     }
+
     function mtof(n){ return 440*Math.pow(2,(n-69)/12); }
-    function playNote({freq,when,dur=0.22,type='triangle',gain=0.25,target=arpGain}){
+
+    function playNote(opts){
+      opts = opts || {};
+      const freq = opts.freq;
+      const when = opts.when;
+      const dur = (opts.dur==null)?0.22:opts.dur;
+      const type = opts.type || 'triangle';
+      const gain = (opts.gain==null)?0.25:opts.gain;
+      const target = opts.target || arpGain;
+
       if (!audio.enabled) return;
       const osc=audio.ctx.createOscillator(), g=audio.ctx.createGain();
       osc.type=type; osc.frequency.value=freq;
@@ -258,21 +283,38 @@ button,input{font-size:16px}
       g.gain.exponentialRampToValueAtTime(0.0001,when+dur);
       osc.connect(g); g.connect(target); osc.start(when); osc.stop(when+dur+0.02);
     }
-    function playPad({freq,when,dur=3.8,gain=0.10}){
+
+    function playPad(opts){
+      opts = opts || {};
+      const freq = opts.freq;
+      const when = opts.when;
+      const dur = (opts.dur==null)?3.8:opts.dur;
+      const gain = (opts.gain==null)?0.10:opts.gain;
+
       if (!audio.enabled) return;
       const o1=audio.ctx.createOscillator(), o2=audio.ctx.createOscillator(), g=audio.ctx.createGain();
-      o1.type='sine'; o2.type='sine'; o1.frequency.value=freq; o2.frequency.value=freq*2**(7/1200);
+      o1.type='sine'; o2.type='sine';
+      o1.frequency.value=freq; o2.frequency.value=freq*Math.pow(2, 7/1200);
       g.gain.setValueAtTime(0.0001,when); g.gain.linearRampToValueAtTime(gain,when+0.8); g.gain.linearRampToValueAtTime(0.0001,when+dur);
       o1.connect(g); o2.connect(g); g.connect(padGain);
       o1.start(when); o2.start(when); o1.stop(when+dur+0.1); o2.stop(when+dur+0.1);
     }
-    const roots=[57,53,60,55]; const arpPattern=[0,7,12,7,0,7,12,14]; const stepDur=0.5;
+
+    const roots=[57,53,60,55];
+    const arpPattern=[0,7,12,7,0,7,12,14];
+    const stepDur=0.5;
+
     function tick(){
       if (!playing || !audio.enabled) return;
-      const t=now(); const bar=Math.floor(step/4); const root=roots[Math.floor(bar%roots.length)];
-      if (step%4===0){ playPad({freq:mtof(root),when:t+0.01,dur=3.8}); playPad({freq:mtof(root+7),when:t+0.01,dur=3.8,gain=0.08}); }
+      const t=now();
+      const bar=Math.floor(step/4);
+      const root=roots[Math.floor(bar%roots.length)];
+      if (step%4===0){
+        playPad({freq:mtof(root),when:t+0.01,dur:3.8});
+        playPad({freq:mtof(root+7),when:t+0.01,dur:3.8,gain:0.08});
+      }
       const intv=arpPattern[step%arpPattern.length];
-      playNote({freq:mtof(root+intv),when:t+0.02,dur=0.24,type:'triangle',gain=0.18});
+      playNote({freq:mtof(root+intv),when:t+0.02,dur:0.24,type:'triangle',gain:0.18});
       step++;
     }
     function start(){ init(); if (playing) return; playing=true; tick(); timer=setInterval(()=>tick(), stepDur*1000); }
@@ -280,6 +322,7 @@ button,input{font-size:16px}
     function setEnabled(on){ master && (master.gain.value = on?0.18:0.0); }
     return { start, stop, setEnabled };
   })();
+
   function applyMuteUI(){
     muteBtn.textContent = audio.enabled ? '🔊' : '🔇';
     muteBtn.setAttribute('aria-pressed', String(!audio.enabled));
@@ -463,7 +506,7 @@ button,input{font-size:16px}
       const p=powerups[i];
       if (p.x===x && p.y===y){
         applyPower(p.type,x,y);
-        p.el.classList.add('fade'); setTimeout(()=>p.el.remove(),450);
+        p.el.classList.add('fade'); setTimeout(()=>p.el && p.el.remove(),450);
         powerups.splice(i,1);
       }
     }
@@ -512,8 +555,10 @@ button,input{font-size:16px}
   }
   function pickNextQueenTarget(e){
     const cx=e.qx, cy=e.qy, ny=cy+1; const options=[];
-    for (const dx of [-1,0,1]){ const nx=cx+dx; if (nx>=0&&nx<SIZE) options.push(nx); }
-    const nx=options[Math.floor(Math.random()*options.length)] ?? cx; e.qtx=nx; e.qty=ny;
+    for (let di=-1; di<=1; di++){ const nx=cx+di; if (nx>=0&&nx<SIZE) options.push(nx); }
+    const idx = Math.floor(Math.random()*options.length);
+    const nx = options.length ? options[idx] : cx;
+    e.qtx=nx; e.qty=ny;
   }
   function pickNextBishopTarget(e){
     const cx=e.bx, cy=e.by; let nx=cx+e.bdir; const ny=cy+1;
@@ -552,7 +597,7 @@ button,input{font-size:16px}
     const dtSec=dt/1000, nowT=performance.now();
     // expire powerups
     for (let i=powerups.length-1;i>=0;i--){
-      if (nowT>powerups[i].expiresAt){ powerups[i].el.classList.add('fade'); setTimeout(()=>p.el && p.el.remove(),450); powerups.splice(i,1); }
+      if (nowT>powerups[i].expiresAt){ powerups[i].el.classList.add('fade'); setTimeout(()=>powerups[i].el && powerups[i].el.remove(),450); powerups.splice(i,1); }
     }
     if (slowUntil && nowT>slowUntil){ slowUntil=0; slowFactor=1.0; bSlow.classList.remove('active'); }
     speedEl.textContent = `${(speedMult*(slowFactor||1)).toFixed(1)}×`;
@@ -647,7 +692,7 @@ button,input{font-size:16px}
     if (!running) return;
     const k=e.key.replace('Arrow','').toLowerCase();
     const dir=DIRS[k]; if (!dir) return;
-    e.preventDefault(); /* prevent scroll on Arrow keys */
+    e.preventDefault();
     processArrow(dir);
   });
 
@@ -704,13 +749,15 @@ button,input{font-size:16px}
   applyMuteUI();
 
   /* ===== Resize sync ===== */
-  const ro = new ResizeObserver(() => {
-    const squares = document.querySelectorAll('.square');
-    squares.forEach((sq, i) => { const x=i%SIZE, y=(i/SIZE)|0; sq.style.left=`${x*CELL()}px`; sq.style.top=`${y*CELL()}px`; });
-    knightEl.style.left = `${knight.x*CELL()}px`; knightEl.style.top = `${knight.y*CELL()}px`;
-    guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
-  });
-  ro.observe(game);
+  if (window.ResizeObserver){
+    const ro = new ResizeObserver(() => {
+      const squares = document.querySelectorAll('.square');
+      squares.forEach((sq, i) => { const x=i%SIZE, y=(i/SIZE)|0; sq.style.left=`${x*CELL()}px`; sq.style.top=`${y*CELL()}px`; });
+      knightEl.style.left = `${knight.x*CELL()}px`; knightEl.style.top = `${knight.y*CELL()}px`;
+      guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
+    });
+    ro.observe(game);
+  }
 })();
 </script>
 </body>
