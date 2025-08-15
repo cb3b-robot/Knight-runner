@@ -2,27 +2,23 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta
-  name="viewport"
-  content="width=device-width, initial-scale=1, viewport-fit=cover"
-/>
-<title>Knight Runner — Mobile Friendly</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Knight Runner — Mobile Friendly Fix</title>
 <style>
 :root{
-  --board: 600px;          /* Will be overridden by JS for iPhone */
+  --board: 600px;              /* JS will override for device */
   --cell: calc(var(--board) / 8);
 }
 *{box-sizing:border-box;}
 html,body{height:100%;}
 body{
-  margin:0;
-  background:#111;color:#fff;
+  margin:0;background:#111;color:#fff;
   font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
   display:flex;flex-direction:column;align-items:center;gap:10px;
   padding: env(safe-area-inset-top) 8px env(safe-area-inset-bottom);
-  overflow:hidden; /* keep the board snug on small iPhones */
+  overflow:hidden;
 }
-h1{margin:4px 0 0;font-size:clamp(18px,3.8vw,28px);}
+h1{margin:6px 0 0;font-size:clamp(18px,3.8vw,28px);}
 
 .hud{
   display:flex;gap:10px;align-items:center;justify-content:center;
@@ -34,8 +30,6 @@ h1{margin:4px 0 0;font-size:clamp(18px,3.8vw,28px);}
 .badge{padding:4px 8px;border-radius:999px;border:1px solid #444;background:#1c1c1c;font-size:12px;opacity:.9}
 .badge.active{border-color:#2ecc71;box-shadow:0 0 0 2px #2ecc7133 inset}
 #muteBtn{padding:6px 10px;border-radius:999px;border:1px solid #444;background:#1c1c1c;color:#fff;cursor:pointer}
-
-/* Make inputs at least 16px to prevent iOS zoom-on-focus */
 button,input{font-size:16px}
 
 /* Game frame */
@@ -90,10 +84,7 @@ button,input{font-size:16px}
 .ga-primary{stroke:#2ecc71; stroke-width:8; fill:none; filter:drop-shadow(0 2px 4px rgba(0,0,0,.6));}
 .ga-hint{stroke:#00d2ff; stroke-width:6; fill:none; stroke-dasharray:10 8; filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));}
 .ga-invalid{ stroke:#e74c3c; opacity:.6; }
-.ga-label{
-  font: 600 14px/1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  fill:#fff; paint-order: stroke; stroke:#000; stroke-width:3px; letter-spacing:.3px;
-}
+.ga-label{font:600 14px/1 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; fill:#fff; paint-order:stroke; stroke:#000; stroke-width:3px;}
 
 /* Game over overlay */
 #over{position:absolute;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;flex-direction:column;z-index:200;text-align:center;padding:20px;}
@@ -111,16 +102,13 @@ button,input{font-size:16px}
   background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;
   box-shadow:0 8px 24px #0007;overflow:hidden;margin:6px 0 10px;
 }
-#leaderboard header{
-  display:flex;justify-content:space-between;align-items:center;
-  padding:8px 10px;background:#222;border-bottom:1px solid #2f2f2f;
-}
+#leaderboard header{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#222;border-bottom:1px solid #2f2f2f;}
 #leaderboard h3{margin:0;font-size:14px;letter-spacing:.3px;}
 #lbStatus{opacity:.8;font-size:12px;}
 #leaderboard ol{
   list-style:none;margin:0;padding:8px 10px;
   display:grid;grid-template-columns:1fr auto;row-gap:4px;
-  max-height:20dvh; overflow:auto; /* scroll scores if space is tight */
+  max-height:20dvh; overflow:auto;
 }
 #leaderboard li{display:contents;}
 #leaderboard .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px;}
@@ -128,15 +116,9 @@ button,input{font-size:16px}
 #resetScores{padding:6px 10px;border-radius:8px;border:1px solid #ff7675;background:#ff7675;color:#111;cursor:pointer;font-weight:700;}
 #resetScores:active{transform:translateY(1px);}
 
-/* Sparkle effect */
+/* Sparkle */
 .sparkle{position:absolute;pointer-events:none;z-index:150;width:8px;height:8px;border-radius:50%;background:#fff;opacity:.9;animation:spark .5s ease-out forwards;}
 @keyframes spark{to{transform:translateY(-12px) scale(.2);opacity:0}}
-
-@media (orientation:landscape) and (max-height: 480px){
-  /* Tiny landscape devices: reduce outer gaps */
-  body{gap:6px}
-  .hud{gap:6px}
-}
 </style>
 </head>
 <body>
@@ -167,585 +149,578 @@ button,input{font-size:16px}
 
 <script>
 (() => {
-/* =================== Responsive board for iPhone =================== */
-const root = document.documentElement;
-const game = document.getElementById('game');
-const hud  = document.querySelector('.hud');
-const leaderboard = document.getElementById('leaderboard');
+  /* ===== Responsive board ===== */
+  const root = document.documentElement;
+  const game = document.getElementById('game');
+  const hud  = document.querySelector('.hud');
 
-/** Compute the largest square that fits the viewport
- *  under the HUD, with some breathing room and safe areas.
- */
-function setBoardSize(){
-  // iOS Safari chrome-safe inner height
-  const vh = window.innerHeight || document.documentElement.clientHeight;
-  const vw = window.innerWidth  || document.documentElement.clientWidth;
-
-  const hudH = hud ? hud.getBoundingClientRect().height : 0;
-  // Keep a few pixels margin around the board
-  const verticalPadding = 16; // top/bottom breathing room
-
-  // Max size constrained by width and by available height under the HUD
-  const maxByHeight = Math.max(240, vh - hudH - verticalPadding - 8); // 8px buffer
-  const maxByWidth  = Math.max(240, vw - 16); // 8px pad each side
-
-  const size = Math.floor(Math.min(maxByHeight, maxByWidth));
-
-  root.style.setProperty('--board', size + 'px');
-  // (var(--cell) is tied to --board via CSS calc)
-}
-
-// Setup / update on rotations & resizes
-window.addEventListener('resize', setBoardSize, {passive:true});
-window.addEventListener('orientationchange', () => setTimeout(setBoardSize, 120), {passive:true});
-document.addEventListener('DOMContentLoaded', () => {
+  function setBoardSize(){
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const vw = window.innerWidth  || document.documentElement.clientWidth;
+    const hudH = hud ? hud.getBoundingClientRect().height : 0;
+    const padding = 16;
+    const maxByHeight = Math.max(240, vh - hudH - padding - 8);
+    const maxByWidth  = Math.max(240, vw - 16);
+    const size = Math.floor(Math.min(maxByHeight, maxByWidth));
+    root.style.setProperty('--board', size + 'px');
+  }
+  window.addEventListener('resize', setBoardSize, {passive:true});
+  window.addEventListener('orientationchange', () => setTimeout(setBoardSize, 120), {passive:true});
   setBoardSize();
-  // Minor reflow after iOS hides address bar
   setTimeout(setBoardSize, 200);
   setTimeout(setBoardSize, 800);
-});
 
-/* =================== (The rest is your game unchanged) =================== */
-const scoreEl = document.getElementById('score');
-const speedEl = document.getElementById('speed');
-const lbList = document.getElementById('lbList');
-const muteBtn = document.getElementById('muteBtn');
+  /* ===== Helpers & constants ===== */
+  const scoreEl = document.getElementById('score');
+  const speedEl = document.getElementById('speed');
+  const lbList  = document.getElementById('lbList');
+  const muteBtn = document.getElementById('muteBtn');
 
-const bShield = document.getElementById('bShield');
-const bSpeed  = document.getElementById('bSpeed');
-const bSlow   = document.getElementById('bSlow');
+  const bShield = document.getElementById('bShield');
+  const bSpeed  = document.getElementById('bSpeed');
+  const bSlow   = document.getElementById('bSlow');
 
-const CELL = () => parseFloat(getComputedStyle(root).getPropertyValue('--cell')); // dynamic cell size
-const SIZE = 8;
-const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
+  const SIZE = 8;
+  const CELL = () => parseFloat(getComputedStyle(root).getPropertyValue('--cell'));
+  const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
 
-/* ---------- Audio (SFX + Music) ---------- */
-const MUTE_KEY = 'KR_mute';
-let audio = { ctx:null, enabled:true, unlocked:false };
-try{ audio.enabled = localStorage.getItem(MUTE_KEY)!=='true' ? true : false; }catch{}
-function ensureAudio(){ if (audio.ctx) return; audio.ctx = new (window.AudioContext||window.webkitAudioContext)(); }
-function unlockAudio(){
-  ensureAudio();
-  if (audio.unlocked) return;
-  const silent = audio.ctx.createBufferSource();
-  silent.buffer = audio.ctx.createBuffer(1,1,22050);
-  silent.connect(audio.ctx.destination);
-  try { silent.start(0); } catch {}
-  audio.unlocked = true;
-  Music.start();
-}
-function now(){ ensureAudio(); return audio.ctx.currentTime; }
-function tone({freq=440, type='sine', dur=0.12, gain=0.05, attack=0.002, release=0.08, slideTo=null, slideTime=0.08}){
-  if (!audio.enabled) return;
-  ensureAudio();
-  const t0 = now();
-  const osc = audio.ctx.createOscillator();
-  const g = audio.ctx.createGain();
-  const f = audio.ctx.createBiquadFilter();
-  f.type = 'lowpass'; f.frequency.value = 8000;
-  osc.type = type; osc.frequency.value = freq;
-  g.gain.setValueAtTime(0, t0);
-  g.gain.linearRampToValueAtTime(gain, t0+attack);
-  if (slideTo!=null){ osc.frequency.setValueAtTime(freq, t0); osc.frequency.linearRampToValueAtTime(slideTo, t0+slideTime); }
-  g.gain.setValueAtTime(gain, t0+dur);
-  g.gain.linearRampToValueAtTime(0.0001, t0+dur+release);
-  osc.connect(f); f.connect(g); g.connect(audio.ctx.destination);
-  osc.start(t0); osc.stop(t0+dur+release+0.02);
-}
-const SFX = {
-  jump(){ tone({freq:600,type:'square',gain:0.04,attack:0.003,release:0.08, slideTo:760, slideTime:0.06}); },
-  pickupShield(){ tone({freq:520,type:'triangle',gain:0.05,attack:0.004,release:0.12}); tone({freq:780,type:'triangle',gain:0.04,attack:0.004,release:0.12, slideTo:880, slideTime:0.08}); },
-  pickupSpeed(){ tone({freq:750,type:'square',gain:0.05,attack:0.003,release:0.09}); },
-  pickupSlow(){ tone({freq:420,type:'sine',gain:0.05,attack:0.003,release:0.18, slideTo:320, slideTime:0.14}); },
-  pickupClear(){ tone({freq:300,type:'sawtooth',gain:0.06,attack:0.004,release:0.18, slideTo:120, slideTime:0.2}); },
-  spawnPower(){ tone({freq:880,type:'triangle',gain:0.035,attack:0.002,release:0.06}); },
-  shieldHit(){ tone({freq:180,type:'square',gain:0.07,attack:0.002,release:0.2}); },
-  gameOver(){ tone({freq:440,type:'sawtooth',gain:0.06,attack:0.004,release:0.25, slideTo:180, slideTime:0.25}); },
-  restart(){ tone({freq:660,type:'triangle',gain:0.05,attack:0.003,release:0.12, slideTo:880, slideTime:0.08}); }
-};
-// Procedural quiet background music
-const Music = (() => {
-  let master, padGain, arpGain, delay, feedback, lowpass, timer=null, step=0, playing=false;
-  function init(){
-    ensureAudio(); if (master) return;
-    master = audio.ctx.createGain(); padGain = audio.ctx.createGain(); arpGain = audio.ctx.createGain();
-    delay = audio.ctx.createDelay(1.0); delay.delayTime.value=0.22;
-    feedback = audio.ctx.createGain(); feedback.gain.value=0.25;
-    lowpass = audio.ctx.createBiquadFilter(); lowpass.type='lowpass'; lowpass.frequency.value=2000;
-    master.gain.value=0.18; padGain.gain.value=0.35; arpGain.gain.value=0.45;
-    const bus = audio.ctx.createGain();
-    padGain.connect(bus); arpGain.connect(bus); bus.connect(lowpass);
-    lowpass.connect(delay); delay.connect(feedback); feedback.connect(delay);
-    delay.connect(master); lowpass.connect(master); master.connect(audio.ctx.destination);
+  /* ===== Audio (SFX + Music) ===== */
+  const MUTE_KEY = 'KR_mute';
+  let audio = { ctx:null, enabled:true, unlocked:false };
+  try{ audio.enabled = localStorage.getItem(MUTE_KEY)!=='true' ? true : false; }catch{}
+  function ensureAudio(){ if (audio.ctx) return; audio.ctx = new (window.AudioContext||window.webkitAudioContext)(); }
+  function unlockAudio(){
+    ensureAudio();
+    if (audio.unlocked) return;
+    const silent = audio.ctx.createBufferSource();
+    silent.buffer = audio.ctx.createBuffer(1,1,22050);
+    silent.connect(audio.ctx.destination);
+    try { silent.start(0); } catch {}
+    audio.unlocked = true; Music.start();
   }
-  function mtof(n){ return 440*Math.pow(2,(n-69)/12); }
-  function playNote({freq,when,dur=0.22,type='triangle',gain=0.25,target=arpGain}){
+  function now(){ ensureAudio(); return audio.ctx.currentTime; }
+  function tone({freq=440, type='sine', dur=0.12, gain=0.05, attack=0.002, release=0.08, slideTo=null, slideTime=0.08}){
     if (!audio.enabled) return;
-    const osc=audio.ctx.createOscillator(), g=audio.ctx.createGain();
+    ensureAudio();
+    const t0 = now();
+    const osc = audio.ctx.createOscillator();
+    const g = audio.ctx.createGain();
+    const f = audio.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=8000;
     osc.type=type; osc.frequency.value=freq;
-    g.gain.setValueAtTime(0.0001,when);
-    g.gain.linearRampToValueAtTime(gain,when+0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001,when+dur);
-    osc.connect(g); g.connect(target); osc.start(when); osc.stop(when+dur+0.02);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(gain, t0+attack);
+    if (slideTo!=null){ osc.frequency.setValueAtTime(freq, t0); osc.frequency.linearRampToValueAtTime(slideTo, t0+slideTime); }
+    g.gain.setValueAtTime(gain, t0+dur);
+    g.gain.linearRampToValueAtTime(0.0001, t0+dur+release);
+    osc.connect(f); f.connect(g); g.connect(audio.ctx.destination);
+    osc.start(t0); osc.stop(t0+dur+release+0.02);
   }
-  function playPad({freq,when,dur=3.8,gain=0.10}){
-    if (!audio.enabled) return;
-    const o1=audio.ctx.createOscillator(), o2=audio.ctx.createOscillator(), g=audio.ctx.createGain();
-    o1.type='sine'; o2.type='sine'; o1.frequency.value=freq; o2.frequency.value=freq*2**(7/1200);
-    g.gain.setValueAtTime(0.0001,when); g.gain.linearRampToValueAtTime(gain,when+0.8); g.gain.linearRampToValueAtTime(0.0001,when+dur);
-    o1.connect(g); o2.connect(g); g.connect(padGain);
-    o1.start(when); o2.start(when); o1.stop(when+dur+0.1); o2.stop(when+dur+0.1);
+  const SFX = {
+    jump(){ tone({freq:600,type:'square',gain:0.04,attack:0.003,release:0.08, slideTo:760, slideTime:0.06}); },
+    pickupShield(){ tone({freq:520,type:'triangle',gain:0.05,attack:0.004,release:0.12}); tone({freq:780,type:'triangle',gain:0.04,attack:0.004,release:0.12, slideTo:880, slideTime:0.08}); },
+    pickupSpeed(){ tone({freq:750,type:'square',gain:0.05,attack:0.003,release:0.09}); },
+    pickupSlow(){ tone({freq:420,type:'sine',gain:0.05,attack:0.003,release:0.18, slideTo:320, slideTime:0.14}); },
+    pickupClear(){ tone({freq:300,type:'sawtooth',gain:0.06,attack:0.004,release:0.18, slideTo:120, slideTime:0.2}); },
+    spawnPower(){ tone({freq:880,type:'triangle',gain:0.035,attack:0.002,release:0.06}); },
+    shieldHit(){ tone({freq:180,type:'square',gain:0.07,attack:0.002,release:0.2}); },
+    gameOver(){ tone({freq:440,type:'sawtooth',gain:0.06,attack:0.004,release:0.25, slideTo:180, slideTime:0.25}); },
+    restart(){ tone({freq:660,type:'triangle',gain:0.05,attack:0.003,release:0.12, slideTo:880, slideTime:0.08}); }
+  };
+  const Music = (() => {
+    let master, padGain, arpGain, delay, feedback, lowpass, timer=null, step=0, playing=false;
+    function init(){
+      ensureAudio(); if (master) return;
+      master = audio.ctx.createGain(); padGain = audio.ctx.createGain(); arpGain = audio.ctx.createGain();
+      delay = audio.ctx.createDelay(1.0); delay.delayTime.value=0.22;
+      feedback = audio.ctx.createGain(); feedback.gain.value=0.25;
+      lowpass = audio.ctx.createBiquadFilter(); lowpass.type='lowpass'; lowpass.frequency.value=2000;
+      master.gain.value=0.18; padGain.gain.value=0.35; arpGain.gain.value=0.45;
+      const bus = audio.ctx.createGain();
+      padGain.connect(bus); arpGain.connect(bus); bus.connect(lowpass);
+      lowpass.connect(delay); delay.connect(feedback); feedback.connect(delay);
+      delay.connect(master); lowpass.connect(master); master.connect(audio.ctx.destination);
+    }
+    function mtof(n){ return 440*Math.pow(2,(n-69)/12); }
+    function playNote({freq,when,dur=0.22,type='triangle',gain=0.25,target=arpGain}){
+      if (!audio.enabled) return;
+      const osc=audio.ctx.createOscillator(), g=audio.ctx.createGain();
+      osc.type=type; osc.frequency.value=freq;
+      g.gain.setValueAtTime(0.0001,when);
+      g.gain.linearRampToValueAtTime(gain,when+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,when+dur);
+      osc.connect(g); g.connect(target); osc.start(when); osc.stop(when+dur+0.02);
+    }
+    function playPad({freq,when,dur=3.8,gain=0.10}){
+      if (!audio.enabled) return;
+      const o1=audio.ctx.createOscillator(), o2=audio.ctx.createOscillator(), g=audio.ctx.createGain();
+      o1.type='sine'; o2.type='sine'; o1.frequency.value=freq; o2.frequency.value=freq*2**(7/1200);
+      g.gain.setValueAtTime(0.0001,when); g.gain.linearRampToValueAtTime(gain,when+0.8); g.gain.linearRampToValueAtTime(0.0001,when+dur);
+      o1.connect(g); o2.connect(g); g.connect(padGain); o1.start(when); o2.start(when); o1.stop(when+dur+0.1); o2.stop(when+dur+0.1);
+    }
+    const roots=[57,53,60,55]; const arpPattern=[0,7,12,7,0,7,12,14]; const stepDur=0.5;
+    function tick(){
+      if (!playing || !audio.enabled) return;
+      const t=now(); const bar=Math.floor(step/4); const root=roots[Math.floor(bar%roots.length)];
+      if (step%4===0){ playPad({freq:mtof(root),when:t+0.01,dur:3.8}); playPad({freq:mtof(root+7),when:t+0.01,dur:3.8,gain:0.08}); }
+      const intv=arpPattern[step%arpPattern.length];
+      playNote({freq:mtof(root+intv),when:t+0.02,dur:0.24,type:'triangle',gain:0.18});
+      step++;
+    }
+    function start(){ init(); if (playing) return; playing=true; tick(); timer=setInterval(()=>tick(), stepDur*1000); }
+    function stop(){ if (!playing) return; playing=false; if (timer){clearInterval(timer); timer=null;} }
+    function setEnabled(on){ master && (master.gain.value = on?0.18:0.0); }
+    return { start, stop, setEnabled };
+  })();
+  function applyMuteUI(){
+    muteBtn.textContent = audio.enabled ? '🔊' : '🔇';
+    muteBtn.setAttribute('aria-pressed', String(!audio.enabled));
+    Music.setEnabled(audio.enabled);
   }
-  const roots=[57,53,60,55]; const arpPattern=[0,7,12,7,0,7,12,14]; const stepDur=0.5;
-  function tick(){
-    if (!playing || !audio.enabled) return;
-    const t=now(); const bar=Math.floor(step/4); const root=roots[Math.floor(bar%roots.length)];
-    if (step%4===0){ playPad({freq:mtof(root),when:t+0.01,dur:3.8}); playPad({freq:mtof(root+7),when:t+0.01,dur:3.8,gain:0.08}); }
-    const intv=arpPattern[step%arpPattern.length];
-    playNote({freq:mtof(root+intv),when:t+0.02,dur:0.24,type:'triangle',gain:0.18});
-    step++;
-  }
-  function start(){ init(); if (playing) return; playing=true; tick(); timer=setInterval(()=>tick(), stepDur*1000); }
-  function stop(){ if (!playing) return; playing=false; if (timer){clearInterval(timer); timer=null;} }
-  function setEnabled(on){ master && (master.gain.value = on?0.18:0.0); }
-  return { start, stop, setEnabled };
-})();
-function applyMuteUI(){
-  muteBtn.textContent = audio.enabled ? '🔊' : '🔇';
-  muteBtn.setAttribute('aria-pressed', String(!audio.enabled));
-  Music.setEnabled(audio.enabled);
-}
-applyMuteUI();
-muteBtn.addEventListener('click', ()=>{
-  unlockAudio();
-  audio.enabled = !audio.enabled;
-  try{ localStorage.setItem(MUTE_KEY, String(!audio.enabled)); }catch{}
   applyMuteUI();
-});
-['pointerdown','keydown'].forEach(evt=>document.addEventListener(evt, unlockAudio, {once:true}));
-
-/* ---------- Leaderboard ---------- */
-const LS_KEY = 'knightRunnerTopScores_v1';
-function loadScores(){ try{const raw=localStorage.getItem(LS_KEY);const a=raw?JSON.parse(raw):[];return Array.isArray(a)?a:[]}catch{ return [] } }
-function saveScores(arr){ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }
-function addScore(name, score){
-  const list = loadScores();
-  list.push({ name:(name||'Player').trim(), score:+score, ts:Date.now() });
-  list.sort((a,b)=> b.score - a.score || a.ts - b.ts);
-  const top10 = list.slice(0,10); saveScores(top10); return top10;
-}
-function renderLeaderboard(myName=null, myScore=null){
-  const lbList = document.getElementById('lbList');
-  lbList.innerHTML='';
-  const list = loadScores();
-  if(list.length===0){
-    const li=document.createElement('li'); const a=document.createElement('div'); a.className='name'; a.textContent='No scores yet';
-    const b=document.createElement('div'); b.className='score'; b.textContent='—';
-    lbList.appendChild(li); lbList.appendChild(a); lbList.appendChild(b); return;
-  }
-  list.forEach((e,i)=>{
-    const li=document.createElement('li');
-    const name=document.createElement('div'); name.className='name'; name.textContent=`${i+1}. ${e.name}`;
-    const sc=document.createElement('div'); sc.className='score'; sc.textContent=`${e.score.toFixed(1)}s`;
-    if(myName && myScore!=null && e.name===myName && Math.abs(e.score-myScore)<1e-6){ name.style.color='#2ecc71'; sc.style.color='#2ecc71'; }
-    lbList.appendChild(li); lbList.appendChild(name); lbList.appendChild(sc);
+  muteBtn.addEventListener('click', ()=>{
+    unlockAudio();
+    audio.enabled = !audio.enabled;
+    try{ localStorage.setItem(MUTE_KEY, String(!audio.enabled)); }catch{}
+    applyMuteUI();
   });
-}
-renderLeaderboard();
-document.getElementById('resetScores').addEventListener('click', ()=>{
-  if (confirm('Clear all saved scores on this device?')) {
-    localStorage.removeItem(LS_KEY);
-    renderLeaderboard();
+  ['pointerdown','keydown'].forEach(evt=>document.addEventListener(evt, unlockAudio, {once:true}));
+
+  /* ===== Leaderboard (local) ===== */
+  const LS_KEY = 'knightRunnerTopScores_v1';
+  function loadScores(){ try{const raw=localStorage.getItem(LS_KEY);const a=raw?JSON.parse(raw):[];return Array.isArray(a)?a:[]}catch{ return [] } }
+  function saveScores(arr){ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }
+  function addScore(name, score){
+    const list = loadScores();
+    list.push({ name:(name||'Player').trim(), score:+score, ts:Date.now() });
+    list.sort((a,b)=> b.score - a.score || a.ts - b.ts);
+    const top10 = list.slice(0,10); saveScores(top10); return top10;
   }
-});
-
-/* ---------- Game State / Board ---------- */
-let running = true;
-let speedMult = 1.0;
-let slowFactor = 1.0;
-let enemies = [];
-let powerups = [];
-let shield = 0;
-let speedMoves = 0;
-let slowUntil = 0;
-
-let spawnTimer, difficultyTimer;
-let startTime = performance.now();
-let lastTime  = startTime;
-
-// Build the board
-for (let y=0;y<SIZE;y++){
-  for (let x=0;x<SIZE;x++){
-    const sq = document.createElement('div');
-    sq.className = 'square ' + ((x+y)%2 ? 'dark' : 'light');
-    sq.style.left = `${x*CELL()}px`;
-    sq.style.top  = `${y*CELL()}px`;
-    sq.style.width = sq.style.height = `calc(var(--cell))`;
-    game.appendChild(sq);
+  function renderLeaderboard(myName=null, myScore=null){
+    lbList.innerHTML='';
+    const list = loadScores();
+    if(list.length===0){
+      const li=document.createElement('li'); const a=document.createElement('div'); a.className='name'; a.textContent='No scores yet';
+      const b=document.createElement('div'); b.className='score'; b.textContent='—';
+      lbList.appendChild(li); lbList.appendChild(a); lbList.appendChild(b); return;
+    }
+    list.forEach((e,i)=>{
+      const li=document.createElement('li');
+      const name=document.createElement('div'); name.className='name'; name.textContent=`${i+1}. ${e.name}`;
+      const sc=document.createElement('div'); sc.className='score'; sc.textContent=`${e.score.toFixed(1)}s`;
+      if(myName && myScore!=null && e.name===myName && Math.abs(e.score-myScore)<1e-6){ name.style.color='#2ecc71'; sc.style.color='#2ecc71'; }
+      lbList.appendChild(li); lbList.appendChild(name); lbList.appendChild(sc);
+    });
   }
-}
+  renderLeaderboard();
+  document.getElementById('resetScores').addEventListener('click', ()=>{
+    if (confirm('Clear all saved scores on this device?')) {
+      localStorage.removeItem(LS_KEY);
+      renderLeaderboard();
+    }
+  });
 
-/* ---------- Knight ---------- */
-let knight = { x:3, y:6 };
-const knightEl = document.createElement('div');
-knightEl.className = 'piece knight';
-knightEl.textContent = GLYPHS.knight;
-game.appendChild(knightEl);
-const placeKnight = () => {
-  knightEl.style.left = `${knight.x*CELL()}px`;
-  knightEl.style.top  = `${knight.y*CELL()}px`;
-};
-placeKnight();
+  /* ===== Game state ===== */
+  let running = true;
+  let speedMult = 1.0;
+  let slowFactor = 1.0;
+  let enemies = [];
+  let powerups = [];
+  let shield = 0;
+  let speedMoves = 0;
+  let slowUntil = 0;
 
-/* ---------- SVG Arrow Guide ---------- */
-const svgNS = 'http://www.w3.org/2000/svg';
-const guide = document.createElementNS(svgNS, 'svg');
-guide.setAttribute('id', 'guideLayer');
-guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
-game.appendChild(guide);
-const defs = document.createElementNS(svgNS, 'defs');
-function mk(id,color){ const m=document.createElementNS(svgNS,'marker'); m.setAttribute('id',id); m.setAttribute('markerWidth','10'); m.setAttribute('markerHeight','10'); m.setAttribute('refX','6'); m.setAttribute('refY','3'); m.setAttribute('orient','auto-start-reverse'); const p=document.createElementNS(svgNS,'path'); p.setAttribute('d','M0,0 L6,3 L0,6 Z'); p.setAttribute('fill',color); m.appendChild(p); return m; }
-defs.appendChild(mk('headPrimary','#2ecc71'));
-defs.appendChild(mk('headHint','#00d2ff'));
-defs.appendChild(mk('headInvalid','#e74c3c'));
-guide.appendChild(defs);
-function clearGuide(){ while (guide.lastChild && guide.lastChild!==defs) guide.removeChild(guide.lastChild); }
-function drawFirstArrow(dir){
-  clearGuide();
-  const cell = CELL();
-  const cx = knight.x*cell + cell/2;
-  const cy = knight.y*cell + cell/2;
-  const tx = knight.x + dir.x*2;
-  const ty = knight.y + dir.y*2;
-  const inside = (tx>=0 && tx<SIZE && ty>=0 && ty<SIZE);
-  const ex = Math.max(0, Math.min((SIZE-1)*cell, tx*cell + cell/2));
-  const ey = Math.max(0, Math.min((SIZE-1)*cell, ty*cell + cell/2));
-  const prim = document.createElementNS(svgNS,'line');
-  prim.setAttribute('x1', cx); prim.setAttribute('y1', cy);
-  prim.setAttribute('x2', ex); prim.setAttribute('y2', ey);
-  prim.setAttribute('class','ga-primary' + (inside ? '' : ' ga-invalid'));
-  prim.setAttribute('marker-end', `url(#${inside?'headPrimary':'headInvalid'})`);
-  guide.appendChild(prim);
-  const label = document.createElementNS(svgNS,'text');
-  label.setAttribute('x', ex + (dir.x===1? 10 : dir.x===-1? -10 : 0));
-  label.setAttribute('y', ey + (dir.y===1? 18 : dir.y===-1? -10 : -12));
-  label.setAttribute('text-anchor', dir.x===-1 ? 'end' : 'start');
-  label.setAttribute('class','ga-label');
-  label.textContent = inside ? 'then choose ⟂' : 'out of bounds';
-  guide.appendChild(label);
-  if (!inside){ game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'), 220); return; }
-  const hints=[];
-  if (dir.x!==0){ hints.push({hx:tx,hy:ty+1}); hints.push({hx:tx,hy:ty-1}); }
-  else { hints.push({hx:tx+1,hy:ty}); hints.push({hx:tx-1,hy:ty}); }
-  for (const h of hints){
-    if (h.hx<0||h.hx>=SIZE||h.hy<0||h.hy>=SIZE) continue;
-    const hx = h.hx*cell + cell/2;
-    const hy = h.hy*cell + cell/2;
-    const line = document.createElementNS(svgNS,'line');
-    line.setAttribute('x1', ex); line.setAttribute('y1', ey);
-    line.setAttribute('x2', hx); line.setAttribute('y2', hy);
-    line.setAttribute('class','ga-hint'); line.setAttribute('marker-end','url(#headHint)');
-    guide.appendChild(line);
+  let spawnTimer, difficultyTimer;
+  let startTime = performance.now();
+  let lastTime  = startTime;
+
+  /* ===== Build board ===== */
+  for (let y=0;y<SIZE;y++){
+    for (let x=0;x<SIZE;x++){
+      const sq = document.createElement('div');
+      sq.className = 'square ' + ((x+y)%2 ? 'dark' : 'light');
+      sq.style.left = `${x*CELL()}px`;
+      sq.style.top  = `${y*CELL()}px`;
+      game.appendChild(sq);
+    }
   }
-}
-// Keep SVG viewBox in sync when board resizes (iPhone rotation)
-const resizeObserver = new ResizeObserver(() => {
+
+  /* ===== Knight ===== */
+  let knight = { x:3, y:6 };
+  const knightEl = document.createElement('div');
+  knightEl.className = 'piece knight';
+  knightEl.textContent = GLYPHS.knight;
+  game.appendChild(knightEl);
+  const placeKnight = () => {
+    knightEl.style.left = `${knight.x*CELL()}px`;
+    knightEl.style.top  = `${knight.y*CELL()}px`;
+  };
+  placeKnight();
+
+  /* ===== SVG Arrow Guide ===== */
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const guide = document.createElementNS(svgNS, 'svg');
+  guide.setAttribute('id', 'guideLayer');
   guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
-  // Also reposition already-placed elements
-  [...document.querySelectorAll('.square')].forEach((sq, i) => {
-    const x = i % SIZE, y = (i/ SIZE)|0;
-    sq.style.left = `${x*CELL()}px`;
-    sq.style.top  = `${y*CELL()}px`;
-    sq.style.width = sq.style.height = `calc(var(--cell))`;
-  });
-  knightEl.style.left = `${knight.x*CELL()}px`;
-  knightEl.style.top  = `${knight.y*CELL()}px`;
-  // Enemies / powerups positions are updated on next frame naturally
-});
-resizeObserver.observe(game);
-
-/* ---------- Knight dots ---------- */
-const knightOffsets = [
-  {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
-  {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
-];
-let dots = [];
-function updateDots(){
-  dots.forEach(d=>d.remove()); dots = [];
-  for (const o of knightOffsets){
-    const tx = knight.x + o.x, ty = knight.y + o.y;
-    if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) continue;
-    const dot = document.createElement('div'); dot.className='dot';
-    dot.style.left=`${tx*CELL()}px`; dot.style.top=`${ty*CELL()}px`;
-    const inner=document.createElement('span'); dot.appendChild(inner);
-    dot.addEventListener('click', ()=> moveKnightTo(tx,ty));
-    game.appendChild(dot); dots.push(dot);
-  }
-}
-
-/* ---------- Power-ups ---------- */
-const POWER_TYPES = ['shield','speed','slow','clear'];
-const POWER_GLYPH = { shield:'🛡', speed:'⚡', slow:'🕒', clear:'💥' };
-function spawnPowerUp(){
-  let tries=20;
-  while(tries-- >0){
-    const x=Math.floor(Math.random()*SIZE);
-    const y=Math.floor(Math.random()*(SIZE-1));
-    if (x===knight.x && y===knight.y) continue;
-    if (enemies.some(e => Math.round(e.px/CELL())===x && Math.round(e.py/CELL())===y)) continue;
-    const type = POWER_TYPES[Math.floor(Math.random()*POWER_TYPES.length)];
-    const el=document.createElement('div'); el.className='power';
-    el.style.left=`${x*CELL()}px`; el.style.top=`${y*CELL()}px`;
-    el.innerHTML=`<div class="glyph">${POWER_GLYPH[type]}</div><div class="ring"></div>`;
-    game.appendChild(el);
-    const expiresAt=performance.now()+5500;
-    powerups.push({el,type,x,y,expiresAt});
-    SFX.spawnPower();
-    break;
-  }
-}
-function pickupAt(x,y){
-  for (let i=powerups.length-1;i>=0;i--){
-    const p=powerups[i];
-    if (p.x===x && p.y===y){
-      applyPower(p.type,x,y);
-      p.el.classList.add('fade'); setTimeout(()=>p.el.remove(),450);
-      powerups.splice(i,1);
+  game.appendChild(guide);
+  const defs = document.createElementNS(svgNS, 'defs');
+  function mk(id,color){ const m=document.createElementNS(svgNS,'marker'); m.setAttribute('id',id); m.setAttribute('markerWidth','10'); m.setAttribute('markerHeight','10'); m.setAttribute('refX','6'); m.setAttribute('refY','3'); m.setAttribute('orient','auto-start-reverse'); const p=document.createElementNS(svgNS,'path'); p.setAttribute('d','M0,0 L6,3 L0,6 Z'); p.setAttribute('fill',color); m.appendChild(p); return m; }
+  defs.appendChild(mk('headPrimary','#2ecc71'));
+  defs.appendChild(mk('headHint','#00d2ff'));
+  defs.appendChild(mk('headInvalid','#e74c3c'));
+  guide.appendChild(defs);
+  function clearGuide(){ while (guide.lastChild && guide.lastChild!==defs) guide.removeChild(guide.lastChild); }
+  function drawFirstArrow(dir){
+    clearGuide();
+    const cell = CELL();
+    const cx = knight.x*cell + cell/2;
+    const cy = knight.y*cell + cell/2;
+    const tx = knight.x + dir.x*2;
+    const ty = knight.y + dir.y*2;
+    const inside = (tx>=0 && tx<SIZE && ty>=0 && ty<SIZE);
+    const ex = Math.max(0, Math.min((SIZE-1)*cell, tx*cell + cell/2));
+    const ey = Math.max(0, Math.min((SIZE-1)*cell, ty*cell + cell/2));
+    const prim = document.createElementNS(svgNS,'line');
+    prim.setAttribute('x1', cx); prim.setAttribute('y1', cy);
+    prim.setAttribute('x2', ex); prim.setAttribute('y2', ey);
+    prim.setAttribute('class','ga-primary' + (inside ? '' : ' ga-invalid'));
+    prim.setAttribute('marker-end', `url(#${inside?'headPrimary':'headInvalid'})`);
+    guide.appendChild(prim);
+    const label = document.createElementNS(svgNS,'text');
+    label.setAttribute('x', ex + (dir.x===1? 10 : dir.x===-1? -10 : 0));
+    label.setAttribute('y', ey + (dir.y===1? 18 : dir.y===-1? -10 : -12));
+    label.setAttribute('text-anchor', dir.x===-1 ? 'end' : 'start');
+    label.setAttribute('class','ga-label');
+    label.textContent = inside ? 'then choose ⟂' : 'out of bounds';
+    guide.appendChild(label);
+    if (!inside){ game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'), 220); return; }
+    const hints=[];
+    if (dir.x!==0){ hints.push({hx:tx,hy:ty+1}); hints.push({hx:tx,hy:ty-1}); }
+    else { hints.push({hx:tx+1,hy:ty}); hints.push({hx:tx-1,hy:ty}); }
+    for (const h of hints){
+      if (h.hx<0||h.hx>=SIZE||h.hy<0||h.hy>=SIZE) continue;
+      const hx = h.hx*cell + cell/2;
+      const hy = h.hy*cell + cell/2;
+      const line = document.createElementNS(svgNS,'line');
+      line.setAttribute('x1', ex); line.setAttribute('y1', ey);
+      line.setAttribute('x2', hx); line.setAttribute('y2', hy);
+      line.setAttribute('class','ga-hint'); line.setAttribute('marker-end','url(#headHint)');
+      guide.appendChild(line);
     }
   }
-}
-function applyPower(type,x,y){
-  sparkle(x,y);
-  if (type==='shield'){ shield=1; bShield.classList.add('active'); SFX.pickupShield(); }
-  if (type==='speed'){ speedMoves=3; bSpeed.classList.add('active'); SFX.pickupSpeed(); }
-  if (type==='slow'){ slowUntil=performance.now()+5000; slowFactor=1?0.5:0.5; bSlow.classList.add('active'); SFX.pickupSlow(); }
-  if (type==='clear'){ enemies.forEach(e=>e.el.remove()); enemies=[]; SFX.pickupClear(); }
-}
-function sparkle(x,y){
-  const cell = CELL();
-  for(let i=0;i<6;i++){
-    const s=document.createElement('div'); s.className='sparkle';
-    s.style.left=`${x*cell + cell*0.37 + Math.random()*cell*0.26}px`;
-    s.style.top =`${y*cell + cell*0.37 + Math.random()*cell*0.26}px`;
-    s.style.background = i%2? '#2ecc71':'#fff';
-    game.appendChild(s); setTimeout(()=>s.remove(),600);
-  }
-}
+  const resizeObserver = new ResizeObserver(() => {
+    guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
+    // reposition squares and knight to the new cell size
+    const squares = document.querySelectorAll('.square');
+    squares.forEach((sq, i) => {
+      const x = i % SIZE, y = (i/ SIZE)|0;
+      sq.style.left = `${x*CELL()}px`;
+      sq.style.top  = `${y*CELL()}px`;
+    });
+    knightEl.style.left = `${knight.x*CELL()}px`;
+    knightEl.style.top  = `${knight.y*CELL()}px`;
+  });
+  resizeObserver.observe(game);
 
-/* ---------- Enemies ---------- */
-const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 }; // cells/sec
-let enemies = [];
-function spawnEnemy(){
-  const r=Math.random();
-  let type = (r>0.85)?'queen' : (r>0.65)?'rook' : (r>0.40)?'bishop' : 'pawn';
-  const x=Math.floor(Math.random()*SIZE), y=-1;
-  const el=document.createElement('div'); el.className='piece enemy'; el.textContent=GLYPHS[type]; game.appendChild(el);
-  const px=x*CELL(), py=y*CELL();
-
-  if (type==='queen'){
-    const e={el,type,px,py,qx:x,qy:y,qtx:x,qty:0,qtpX:x*CELL(),qtpY:0,stepSpeed:BASE_SPEED.queen};
-    pickNextQueenTarget(e); e.qtpX=e.qtx*CELL(); e.qtpY=e.qty*CELL();
-    el.style.left=`${px}px`; el.style.top=`${py}px`; enemies.push(e); return;
-  }
-  if (type==='bishop'){
-    const dirX=(Math.random()<0.5)?-1:1;
-    const e={el,type,px,py,bx:x,by:y,bdir:dirX,btx:x+dirX,bty:0,btpX:(x+dirX)*CELL(),btpY:0,stepSpeed:BASE_SPEED.bishop};
-    if (e.btx<0||e.btx>=SIZE){ e.bdir=-e.bdir; e.btx=e.bx+e.bdir; e.btpX=e.btx*CELL(); }
-    el.style.left=`${px}px`; el.style.top=`${py}px`; enemies.push(e); return;
-  }
-  let vxCells=0, vyCells=BASE_SPEED[type];
-  if (type==='rook'){ vxCells=0; vyCells=BASE_SPEED.rook; }
-  const e={el,type,px,py,vxCells,vyCells}; el.style.left=`${px}px`; el.style.top=`${py}px`; enemies.push(e);
-}
-function pickNextQueenTarget(e){
-  const cx=e.qx, cy=e.qy, ny=cy+1; const options=[];
-  for (const dx of [-1,0,1]){ const nx=cx+dx; if (nx>=0&&nx<SIZE) options.push(nx); }
-  const nx=options[Math.floor(Math.random()*options.length)] ?? cx; e.qtx=nx; e.qty=ny;
-}
-function pickNextBishopTarget(e){
-  const cx=e.bx, cy=e.by; let nx=cx+e.bdir; const ny=cy+1;
-  if (nx<0||nx>=SIZE){ e.bdir=-e.bdir; nx=cx+e.bdir; }
-  e.btx=nx; e.bty=ny;
-}
-
-/* ---------- Difficulty / spawn ---------- */
-const baseSpawnDelay=1500;
-let slowFactor = 1.0;
-function scheduleSpawn(){
-  const next=Math.max(60, baseSpawnDelay / (speedMult*(slowFactor||1)));
-  spawnTimer=setTimeout(function tick(){
+  /* ===== Knight dots ===== */
+  const knightOffsets = [
+    {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
+    {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
+  ];
+  let dots = [];
+  function updateDots(){
+    dots.forEach(d=>d.remove()); dots = [];
     if (!running) return;
-    if (Math.random()<0.12) spawnPowerUp(); else spawnEnemy();
-    scheduleSpawn();
-  }, next);
-}
-function scheduleDifficulty(){
-  difficultyTimer=setInterval(()=>{
-    if (!running) return;
-    speedMult += 0.4;
+    for (const o of knightOffsets){
+      const tx = knight.x + o.x, ty = knight.y + o.y;
+      if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) continue;
+      const dot = document.createElement('div'); dot.className='dot';
+      dot.style.left=`${tx*CELL()}px`; dot.style.top=`${ty*CELL()}px`;
+      const inner=document.createElement('span'); dot.appendChild(inner);
+      dot.addEventListener('click', ()=> moveKnightTo(tx,ty));
+      game.appendChild(dot); dots.push(dot);
+    }
+  }
+
+  /* ===== Power-ups ===== */
+  const POWER_TYPES = ['shield','speed','slow','clear'];
+  const POWER_GLYPH = { shield:'🛡', speed:'⚡', slow:'🕒', clear:'💥' };
+  function spawnPowerUp(){
+    let tries=20;
+    while(tries-- >0){
+      const x=Math.floor(Math.random()*SIZE);
+      const y=Math.floor(Math.random()*(SIZE-1));
+      if (x===knight.x && y===knight.y) continue;
+      if (enemies.some(e => Math.round(e.px/CELL())===x && Math.round(e.py/CELL())===y)) continue;
+      const type = POWER_TYPES[Math.floor(Math.random()*POWER_TYPES.length)];
+      const el=document.createElement('div'); el.className='power';
+      el.style.left=`${x*CELL()}px`; el.style.top=`${y*CELL()}px`;
+      el.innerHTML=`<div class="glyph">${POWER_GLYPH[type]}</div><div class="ring"></div>`;
+      game.appendChild(el);
+      const expiresAt=performance.now()+5500;
+      powerups.push({el,type,x,y,expiresAt});
+      SFX.spawnPower();
+      break;
+    }
+  }
+  function pickupAt(x,y){
+    for (let i=powerups.length-1;i>=0;i--){
+      const p=powerups[i];
+      if (p.x===x && p.y===y){
+        applyPower(p.type,x,y);
+        p.el.classList.add('fade'); setTimeout(()=>p.el.remove(),450);
+        powerups.splice(i,1);
+      }
+    }
+  }
+  function applyPower(type,x,y){
+    sparkle(x,y);
+    if (type==='shield'){ shield=1; bShield.classList.add('active'); SFX.pickupShield(); }
+    if (type==='speed'){ speedMoves=3; bSpeed.classList.add('active'); SFX.pickupSpeed(); }
+    if (type==='slow'){ slowUntil=performance.now()+5000; slowFactor=0.5; bSlow.classList.add('active'); SFX.pickupSlow(); }
+    if (type==='clear'){ enemies.forEach(e=>e.el.remove()); enemies=[]; SFX.pickupClear(); }
+  }
+  function sparkle(x,y){
+    const cell = CELL();
+    for(let i=0;i<6;i++){
+      const s=document.createElement('div'); s.className='sparkle';
+      s.style.left=`${x*cell + cell*0.37 + Math.random()*cell*0.26}px`;
+      s.style.top =`${y*cell + cell*0.37 + Math.random()*cell*0.26}px`;
+      s.style.background = i%2? '#2ecc71':'#fff';
+      game.appendChild(s); setTimeout(()=>s.remove(),600);
+    }
+  }
+
+  /* ===== Enemies ===== */
+  const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 }; // cells/sec
+  function spawnEnemy(){
+    const r=Math.random();
+    let type = (r>0.85)?'queen' : (r>0.65)?'rook' : (r>0.40)?'bishop' : 'pawn';
+    const x=Math.floor(Math.random()*SIZE), y=-1;
+    const el=document.createElement('div'); el.className='piece enemy'; el.textContent=GLYPHS[type]; game.appendChild(el);
+    const px=x*CELL(), py=y*CELL();
+
+    if (type==='queen'){
+      const e={el,type,px,py,qx:x,qy:y,qtx:x,qty:0,qtpX:x*CELL(),qtpY:0,stepSpeed:BASE_SPEED.queen};
+      pickNextQueenTarget(e); e.qtpX=e.qtx*CELL(); e.qtpY=e.qty*CELL();
+      el.style.left=`${px}px`; el.style.top=`${py}px`; enemies.push(e); return;
+    }
+    if (type==='bishop'){
+      const dirX=(Math.random()<0.5)?-1:1;
+      const e={el,type,px,py,bx:x,by:y,bdir:dirX,btx:x+dirX,bty:0,btpX:(x+dirX)*CELL(),btpY:0,stepSpeed:BASE_SPEED.bishop};
+      if (e.btx<0||e.btx>=SIZE){ e.bdir=-e.bdir; e.btx=e.bx+e.bdir; e.btpX=e.btx*CELL(); }
+      el.style.left=`${px}px`; el.style.top=`${py}px`; enemies.push(e); return;
+    }
+    let vxCells=0, vyCells=BASE_SPEED[type];
+    if (type==='rook'){ vxCells=0; vyCells=BASE_SPEED.rook; }
+    const e={el,type,px,py,vxCells,vyCells}; el.style.left=`${px}px`; el.style.top=`${py}px`; enemies.push(e);
+  }
+  function pickNextQueenTarget(e){
+    const cx=e.qx, cy=e.qy, ny=cy+1; const options=[];
+    for (const dx of [-1,0,1]){ const nx=cx+dx; if (nx>=0&&nx<SIZE) options.push(nx); }
+    const nx=options[Math.floor(Math.random()*options.length)] ?? cx; e.qtx=nx; e.qty=ny;
+  }
+  function pickNextBishopTarget(e){
+    const cx=e.bx, cy=e.by; let nx=cx+e.bdir; const ny=cy+1;
+    if (nx<0||nx>=SIZE){ e.bdir=-e.bdir; nx=cx+e.bdir; }
+    e.btx=nx; e.bty=ny;
+  }
+
+  /* ===== Difficulty / spawn ===== */
+  const baseSpawnDelay=1500;
+  function scheduleSpawn(){
+    const next=Math.max(60, baseSpawnDelay / (speedMult*(slowFactor||1)));
+    spawnTimer=setTimeout(function tick(){
+      if (!running) return;
+      if (Math.random()<0.12) spawnPowerUp(); else spawnEnemy();
+      scheduleSpawn();
+    }, next);
+  }
+  function scheduleDifficulty(){
+    difficultyTimer=setInterval(()=>{
+      if (!running) return;
+      speedMult += 0.4;
+      speedEl.textContent = `${(speedMult*(slowFactor||1)).toFixed(1)}×`;
+      clearTimeout(spawnTimer);
+      scheduleSpawn();
+    }, 6000);
+  }
+
+  /* ===== Movement & collision ===== */
+  function clampX(px){
+    const max=(SIZE-1)*CELL();
+    if (px < 0) return 0;
+    if (px > max) return max;
+    return px;
+  }
+  function moveEnemiesSmooth(dt){
+    const dtSec=dt/1000, nowT=performance.now();
+    for (let i=powerups.length-1;i>=0;i--){
+      if (nowT>powerups[i].expiresAt){ powerups[i].el.classList.add('fade'); setTimeout(()=>powerups[i].el.remove(),450); powerups.splice(i,1); }
+    }
+    if (slowUntil && nowT>slowUntil){ slowUntil=0; slowFactor=1.0; bSlow.classList.remove('active'); }
     speedEl.textContent = `${(speedMult*(slowFactor||1)).toFixed(1)}×`;
-    clearTimeout(spawnTimer);
-    scheduleSpawn();
-  }, 6000);
-}
+    const mult=speedMult*(slowFactor||1);
 
-/* ---------- Movement / collisions ---------- */
-function clampX(px){
-  const max=(SIZE-1)*CELL();
-  if (px < 0) return 0;
-  if (px > max) return max;
-  return px;
-}
-function moveEnemiesSmooth(dt){
-  const dtSec=dt/1000, nowT=performance.now();
-  for (let i=powerups.length-1;i>=0;i--){
-    if (nowT>powerups[i].expiresAt){ powerups[i].el.classList.add('fade'); setTimeout(()=>powerups[i].el.remove(),450); powerups.splice(i,1); }
-  }
-  if (slowUntil && nowT>slowUntil){ slowUntil=0; slowFactor=1.0; bSlow.classList.remove('active'); }
-  speedEl.textContent = `${(speedMult*(slowFactor||1)).toFixed(1)}×`;
-  const mult=speedMult*(slowFactor||1);
+    for (let i=enemies.length-1;i>=0;i--){
+      const e=enemies[i];
+      if (e.type==='queen'){
+        const speedPx=e.stepSpeed*CELL()*mult;
+        const dx=e.qtpX-e.px, dy=e.qtpY-e.py; const dist=Math.hypot(dx,dy); const step=speedPx*dtSec;
+        if (dist<=step || dist===0){
+          e.px=e.qtpX; e.py=e.qtpY; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
+          e.qx=e.qtx; e.qy=e.qty;
+          if (e.qy>=SIZE){ e.el.remove(); enemies.splice(i,1); continue; }
+          pickNextQueenTarget(e); e.qtpX=e.qtx*CELL(); e.qtpY=e.qty*CELL();
+        }else{
+          const ux=dx/dist, uy=dy/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
+        }
+      } else if (e.type==='bishop'){
+        const speedPx=e.stepSpeed*CELL()*mult;
+        const dx=e.btpX-e.px, dy=e.btpY-e.py; const dist=Math.hypot(dx,dy); const step=speedPx*dtSec;
+        if (dist<=step || dist===0){
+          e.px=e.btpX; e.py=e.btpY; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
+          e.bx=e.btx; e.by=e.bty;
+          if (e.by>=SIZE){ e.el.remove(); enemies.splice(i,1); continue; }
+          pickNextBishopTarget(e); e.btpX=e.btx*CELL(); e.btpY=e.bty*CELL();
+        }else{
+          const ux=dx/dist, uy=dy/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
+        }
+      } else {
+        const vx=(e.vxCells||0)*CELL()*mult, vy=(e.vyCells||0)*CELL()*mult;
+        e.px=clampX(e.px + vx*dtSec); e.py+=vy*dtSec; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
+      }
 
-  for (let i=enemies.length-1;i>=0;i--){
-    const e=enemies[i];
-    if (e.type==='queen'){
-      const speedPx=e.stepSpeed*CELL()*mult;
-      const dx=e.qtpX-e.px, dy=e.qtpY-e.py; const dist=Math.hypot(dx,dy); const step=speedPx*dtSec;
-      if (dist<=step || dist===0){
-        e.px=e.qtpX; e.py=e.qtpY; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
-        e.qx=e.qtx; e.qy=e.qty;
-        if (e.qy>=SIZE){ e.el.remove(); enemies.splice(i,1); continue; }
-        pickNextQueenTarget(e); e.qtpX=e.qtx*CELL(); e.qtpY=e.qty*CELL();
-      }else{
-        const ux=dx/dist, uy=dy/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
+      const ex=Math.round(e.px/CELL()), ey=Math.round(e.py/CELL());
+      if (ex===knight.x && ey===knight.y){
+        if (shield>0){ shield=0; bShield.classList.remove('active'); e.el.remove(); enemies.splice(i,1); game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'),220); SFX.shieldHit(); }
+        else { gameOver(); return; }
       }
-    } else if (e.type==='bishop'){
-      const speedPx=e.stepSpeed*CELL()*mult;
-      const dx=e.btpX-e.px, dy=e.btpY-e.py; const dist=Math.hypot(dx,dy); const step=speedPx*dtSec;
-      if (dist<=step || dist===0){
-        e.px=e.btpX; e.py=e.btpY; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
-        e.bx=e.btx; e.by=e.bty;
-        if (e.by>=SIZE){ e.el.remove(); enemies.splice(i,1); continue; }
-        pickNextBishopTarget(e); e.btpX=e.btx*CELL(); e.btpY=e.bty*CELL();
-      }else{
-        const ux=dx/dist, uy=dy/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
-      }
-    } else {
-      const vx=(e.vxCells||0)*CELL()*mult, vy=(e.vyCells||0)*CELL()*mult;
-      e.px=clampX(e.px + vx*dtSec); e.py+=vy*dtSec; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
+      if (e.py>SIZE*CELL()){ e.el.remove(); enemies.splice(i,1); }
     }
 
-    const ex=Math.round(e.px/CELL()), ey=Math.round(e.py/CELL());
-    if (ex===knight.x && ey===knight.y){
-      if (shield>0){ shield=0; bShield.classList.remove('active'); e.el.remove(); enemies.splice(i,1); game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'),220); SFX.shieldHit(); }
-      else { gameOver(); return; }
+    // danger glow
+    let danger=false;
+    for (const o of [{x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},{x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}]){
+      const tx=knight.x+o.x, ty=knight.y+o.y;
+      if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) continue;
+      if (enemies.some(e=>Math.round(e.px/CELL())===tx && Math.round(e.py/CELL())===ty)){ danger=true; break; }
     }
-    if (e.py>SIZE*CELL()){ e.el.remove(); enemies.splice(i,1); }
+    knightEl.classList.toggle('danger', danger);
+  }
+  function checkCollision(){
+    if (enemies.some(e=>Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y)){
+      if (shield>0){ shield=0; bShield.classList.remove('active'); enemies=enemies.filter(e=>!(Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y)); SFX.shieldHit(); }
+      else gameOver();
+    }
   }
 
-  // danger glow
-  let danger=false;
-  for (const o of [{x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},{x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}]){
-    const tx=knight.x+o.x, ty=knight.y+o.y;
-    if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) continue;
-    if (enemies.some(e=>Math.round(e.px/CELL())===tx && Math.round(e.py/CELL())===ty)){ danger=true; break; }
+  /* ===== Knight movement ===== */
+  function moveKnightTo(tx,ty){
+    if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) return;
+    knight.x=tx; knight.y=ty; placeKnight();
+    SFX.jump(); pickupAt(tx,ty); checkCollision(); updateDots(); clearGuide();
+    if (speedMoves>0){ speedMoves--; if (speedMoves===0) bSpeed.classList.remove('active'); }
   }
-  knightEl.classList.toggle('danger', danger);
-}
-function checkCollision(){
-  if (enemies.some(e=>Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y)){
-    if (shield>0){ shield=0; bShield.classList.remove('active'); enemies=enemies.filter(e=>!(Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y)); SFX.shieldHit(); }
-    else gameOver();
+
+  /* ===== Loop ===== */
+  function loop(now){
+    if (!running) return;
+    const dt=now-lastTime; lastTime=now;
+    moveEnemiesSmooth(dt);
+    scoreEl.textContent=((now-startTime)/1000).toFixed(1);
+    requestAnimationFrame(loop);
   }
-}
 
-/* ---------- Knight move ---------- */
-function moveKnightTo(tx,ty){
-  if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) return;
-  knight.x=tx; knight.y=ty; placeKnight();
-  SFX.jump();
-  pickupAt(tx,ty); checkCollision(); updateDots(); clearGuide();
-  if (speedMoves>0){ speedMoves--; if (speedMoves===0) bSpeed.classList.remove('active'); }
-}
-
-/* ---------- Loop ---------- */
-function loop(now){
-  if (!running) return;
-  const dt=now-lastTime; lastTime=now;
-  moveEnemiesSmooth(dt);
-  scoreEl.textContent=((now-startTime)/1000).toFixed(1);
-  requestAnimationFrame(loop);
-}
-
-/* ---------- Arrow key two-step ---------- */
-const DIRS = { up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
-let arrowStep=0, firstArrow=null;
-function processArrow(dir){
-  if (arrowStep===0){ firstArrow=dir; arrowStep=1; drawFirstArrow(dir); return; }
-  const dx2=firstArrow.x*2, dy2=firstArrow.y*2;
-  let tx=knight.x, ty=knight.y;
-  if (firstArrow.x!==0 && dir.y!==0){ tx+=dx2; ty+=dir.y; }
-  else if (firstArrow.y!==0 && dir.x!==0){ tx+=dir.x; ty+=dy2; }
-  else if (firstArrow.x===-dir.x && firstArrow.y===-dir.y){ arrowStep=0; firstArrow=null; clearGuide(); return; }
-  else { arrowStep=0; firstArrow=null; clearGuide(); return; }
-  if (tx<0||tx>=SIZE||ty<0||ty>=SIZE){ arrowStep=0; firstArrow=null; clearGuide(); return; }
-  arrowStep=0; firstArrow=null; clearGuide(); moveKnightTo(tx,ty);
-}
-document.addEventListener('keydown', (e)=>{
-  if (!running) return;
-  const k=e.key.replace('Arrow','').toLowerCase();
-  const dir=DIRS[k]; if (!dir) return; processArrow(dir);
-});
-
-/* ---------- Game over / restart ---------- */
-function gameOver(){
-  if (!running) return;
-  running=false; clearTimeout(spawnTimer); clearInterval(difficultyTimer);
-  dots.forEach(d=>d.remove()); dots=[]; clearGuide();
-  game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'),350);
-  SFX.gameOver(); Music.stop();
-
-  const over=document.createElement('div'); over.id='over';
-  const finalScore=parseFloat(scoreEl.textContent)||0;
-  over.innerHTML=`
-    <h2>Game Over</h2>
-    <p>You survived <strong>${finalScore.toFixed(1)}s</strong></p>
-    <div id="saveRow">
-      <input id="playerName" maxlength="16" placeholder="Your name">
-      <button id="saveBtn">Save Score</button>
-    </div>
-    <button id="restart">Play Again</button>`;
-  game.appendChild(over); over.style.display='flex';
-
-  const nameInput=over.querySelector('#playerName');
-  const saveBtn=over.querySelector('#saveBtn');
-  const restartBtn=over.querySelector('#restart');
-  const lastName=localStorage.getItem('knightRunner_lastName')||''; if (lastName) nameInput.value=lastName;
-
-  saveBtn.addEventListener('click', ()=>{
-    const name=(nameInput.value||'Player').trim();
-    localStorage.setItem('knightRunner_lastName', name);
-    addScore(name, finalScore);
-    saveBtn.disabled=true; renderLeaderboard(name, finalScore);
+  /* ===== Arrow key two-step ===== */
+  const DIRS = { up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
+  let arrowStep=0, firstArrow=null;
+  function processArrow(dir){
+    if (arrowStep===0){ firstArrow=dir; arrowStep=1; drawFirstArrow(dir); return; }
+    const dx2=firstArrow.x*2, dy2=firstArrow.y*2;
+    let tx=knight.x, ty=knight.y;
+    if (firstArrow.x!==0 && dir.y!==0){ tx+=dx2; ty+=dir.y; }
+    else if (firstArrow.y!==0 && dir.x!==0){ tx+=dir.x; ty+=dy2; }
+    else if (firstArrow.x===-dir.x && firstArrow.y===-dir.y){ arrowStep=0; firstArrow=null; clearGuide(); return; }
+    else { arrowStep=0; firstArrow=null; clearGuide(); return; }
+    if (tx<0||tx>=SIZE||ty<0||ty>=SIZE){ arrowStep=0; firstArrow=null; clearGuide(); return; }
+    arrowStep=0; firstArrow=null; clearGuide(); moveKnightTo(tx,ty);
+  }
+  document.addEventListener('keydown', (e)=>{
+    if (!running) return;
+    const k=e.key.replace('Arrow','').toLowerCase();
+    const dir=DIRS[k]; if (!dir) return; processArrow(dir);
   });
-  restartBtn.addEventListener('click', restart);
-}
-function restart(){
-  enemies.forEach(e=>e.el.remove()); enemies=[];
-  powerups.forEach(p=>p.el.remove()); powerups=[];
-  const over=document.getElementById('over'); if (over) over.remove();
-  speedMult=1.0; slowFactor=1.0; slowUntil=0; shield=0; speedMoves=0;
-  bShield.classList.remove('active'); bSpeed.classList.remove('active'); bSlow.classList.remove('active');
-  speedEl.textContent='1.0×';
-  startTime=performance.now(); lastTime=startTime;
-  knight={x:3,y:6}; placeKnight();
-  arrowStep=0; firstArrow=null; clearGuide();
-  running=true; updateDots(); clearTimeout(spawnTimer); clearInterval(difficultyTimer);
-  scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
-  SFX.restart(); Music.start();
-}
 
-/* ---------- Kickoff ---------- */
-updateDots(); scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
+  /* ===== Game over / restart ===== */
+  function gameOver(){
+    if (!running) return;
+    running=false; clearTimeout(spawnTimer); clearInterval(difficultyTimer);
+    dots.forEach(d=>d.remove()); dots=[]; clearGuide();
+    game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'),350);
+    SFX.gameOver(); Music.stop();
+
+    const over=document.createElement('div'); over.id='over';
+    const finalScore=parseFloat(scoreEl.textContent)||0;
+    over.innerHTML=`
+      <h2>Game Over</h2>
+      <p>You survived <strong>${finalScore.toFixed(1)}s</strong></p>
+      <div id="saveRow">
+        <input id="playerName" maxlength="16" placeholder="Your name">
+        <button id="saveBtn">Save Score</button>
+      </div>
+      <button id="restart">Play Again</button>`;
+    game.appendChild(over); over.style.display='flex';
+
+    const nameInput=over.querySelector('#playerName');
+    const saveBtn=over.querySelector('#saveBtn');
+    const restartBtn=over.querySelector('#restart');
+    const lastName=localStorage.getItem('knightRunner_lastName')||''; if (lastName) nameInput.value=lastName;
+
+    saveBtn.addEventListener('click', ()=>{
+      const name=(nameInput.value||'Player').trim();
+      localStorage.setItem('knightRunner_lastName', name);
+      addScore(name, finalScore);
+      saveBtn.disabled=true; renderLeaderboard(name, finalScore);
+    });
+    restartBtn.addEventListener('click', restart);
+  }
+  function restart(){
+    enemies.forEach(e=>e.el.remove()); enemies=[];
+    powerups.forEach(p=>p.el.remove()); powerups=[];
+    const over=document.getElementById('over'); if (over) over.remove();
+    speedMult=1.0; slowFactor=1.0; slowUntil=0; shield=0; speedMoves=0;
+    bShield.classList.remove('active'); bSpeed.classList.remove('active'); bSlow.classList.remove('active');
+    speedEl.textContent='1.0×';
+    startTime=performance.now(); lastTime=startTime;
+    knight={x:3,y:6}; placeKnight();
+    arrowStep=0; firstArrow=null; clearGuide();
+    running=true; updateDots(); clearTimeout(spawnTimer); clearInterval(difficultyTimer);
+    scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
+    SFX.restart(); Music.start();
+  }
+
+  /* ===== Start ===== */
+  function scheduleSpawn(){
+    const next=Math.max(60, baseSpawnDelay / (speedMult*(slowFactor||1)));
+    spawnTimer=setTimeout(function tick(){
+      if (!running) return;
+      if (Math.random()<0.12) spawnPowerUp(); else spawnEnemy();
+      scheduleSpawn();
+    }, next);
+  }
+  const baseSpawnDelay=1500;
+  function scheduleDifficulty(){
+    difficultyTimer=setInterval(()=>{
+      if (!running) return;
+      speedMult += 0.4;
+      speedEl.textContent = `${(speedMult*(slowFactor||1)).toFixed(1)}×`;
+      clearTimeout(spawnTimer);
+      scheduleSpawn();
+    }, 6000);
+  }
+
+  updateDots(); scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
+  applyMuteUI();
 
 })();
 </script>
