@@ -145,9 +145,8 @@ function constrainPosition(pos){
   if(pos.y>7) pos.y=7;
 }
 
-// --- Two-step move system ---
-let firstStep = null; // stores {dx, dy} of first click
-
+// --- Two-step knight move ---
+let firstStep = null; // store first click info
 const dirMap = {
   'up': {x:0, y:-1},
   'down': {x:0, y:1},
@@ -160,26 +159,29 @@ function handleStep(dir){
   if(!move) return;
 
   if(!firstStep){
-    // First click: must move 2 squares
+    // First click: 2 squares in that direction
     firstStep = {dx: move.x*2, dy: move.y*2, dir: move};
   } else {
-    // Second click: must be perpendicular short step
-    const step = move;
-    // check perpendicular
-    const dot = firstStep.dir.x*step.x + firstStep.dir.y*step.y;
-    if(dot !== 0 && (Math.abs(step.x)+Math.abs(step.y)===1)){
-      // valid L-shape, apply move
-      knightPos.x += firstStep.dx + step.x;
-      knightPos.y += firstStep.dy + step.y;
+    // Second click
+    // Undo if exact opposite
+    if(move.x === -firstStep.dir.x && move.y === -firstStep.dir.y){
+      firstStep = null;
+      return;
+    }
+    // Check perpendicular short move
+    const dot = firstStep.dir.x*move.x + firstStep.dir.y*move.y;
+    if(dot === 0 && (Math.abs(move.x)+Math.abs(move.y)===1)){
+      // valid L-shape
+      knightPos.x += firstStep.dx + move.x;
+      knightPos.y += firstStep.dy + move.y;
       constrainPosition(knightPos);
       placeKnight();
     }
-    // cancel first step in any case
-    firstStep = null;
+    firstStep = null; // reset first step in any case
   }
 }
 
-// Keyboard
+// Keyboard controls
 document.addEventListener('keydown', e=>{
   switch(e.key){
     case "ArrowUp": handleStep('up'); break;
