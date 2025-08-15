@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Knight Runner — Power-ups & Effects</title>
+<title>Knight Runner — Sounds, Power-ups & Leaderboard</title>
 <style>
 :root{--board:600px;--cell:75px;}
 *{box-sizing:border-box;}
@@ -14,6 +14,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
 #status{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .badge{padding:4px 8px;border-radius:999px;border:1px solid #444;background:#1c1c1c;font-size:12px;opacity:.9}
 .badge.active{border-color:#2ecc71;box-shadow:0 0 0 2px #2ecc7133 inset}
+#muteBtn{padding:6px 10px;border-radius:999px;border:1px solid #444;background:#1c1c1c;color:#fff;cursor:pointer}
 
 /* Game frame */
 #game{
@@ -124,6 +125,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     <div class="badge" id="bShield">🛡 shield</div>
     <div class="badge" id="bSpeed">⚡ speed</div>
     <div class="badge" id="bSlow">🕒 slow</div>
+    <button id="muteBtn" aria-pressed="false" title="Mute/Unmute">🔊</button>
   </div>
 </div>
 <div id="game"></div>
@@ -146,6 +148,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   const scoreEl = document.getElementById('score');
   const speedEl = document.getElementById('speed');
   const lbList = document.getElementById('lbList');
+  const muteBtn = document.getElementById('muteBtn');
 
   const bShield = document.getElementById('bShield');
   const bSpeed  = document.getElementById('bSpeed');
@@ -153,6 +156,62 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
 
   const CELL = 75, SIZE = 8;
   const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
+
+  /* ---------- Tiny Audio Engine (no files) ---------- */
+  let audio = { ctx:null, enabled:true, unlocked:false };
+  function ensureAudio(){
+    if (audio.ctx) return;
+    audio.ctx = new (window.AudioContext||window.webkitAudioContext)();
+  }
+  function unlockAudio(){
+    ensureAudio();
+    if (audio.unlocked) return;
+    const silent = audio.ctx.createBufferSource();
+    silent.buffer = audio.ctx.createBuffer(1,1,22050);
+    silent.connect(audio.ctx.destination);
+    try { silent.start(0); } catch {}
+    audio.unlocked = true;
+  }
+  function now(){ ensureAudio(); return audio.ctx.currentTime; }
+  function tone({freq=440, type='sine', dur=0.12, gain=0.05, attack=0.002, release=0.08, slideTo=null, slideTime=0.08}){
+    if (!audio.enabled) return;
+    ensureAudio();
+    const t0 = now();
+    const osc = audio.ctx.createOscillator();
+    const g = audio.ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(gain, t0+attack);
+    if (slideTo!=null){
+      osc.frequency.setValueAtTime(freq, t0);
+      osc.frequency.linearRampToValueAtTime(slideTo, t0+slideTime);
+    }
+    g.gain.setValueAtTime(gain, t0+dur);
+    g.gain.linearRampToValueAtTime(0.0001, t0+dur+release);
+    osc.connect(g); g.connect(audio.ctx.destination);
+    osc.start(t0); osc.stop(t0+dur+release+0.02);
+  }
+  const SFX = {
+    jump(){ tone({freq:600,type:'square',gain:0.04,attack:0.003,release:0.08, slideTo:760, slideTime:0.06}); },
+    pickupShield(){ tone({freq:520,type:'triangle',gain:0.05,attack:0.004,release:0.12}); tone({freq:780,type:'triangle',gain:0.04,attack:0.004,release:0.12, slideTo:880, slideTime:0.08}); },
+    pickupSpeed(){ tone({freq:750,type:'square',gain:0.05,attack:0.003,release:0.09}); },
+    pickupSlow(){ tone({freq:420,type:'sine',gain:0.05,attack:0.003,release:0.18, slideTo:320, slideTime:0.14}); },
+    pickupClear(){ tone({freq:300,type:'sawtooth',gain:0.06,attack:0.004,release:0.18, slideTo:120, slideTime:0.2}); },
+    spawnPower(){ tone({freq:880,type:'triangle',gain:0.035,attack:0.002,release:0.06}); },
+    shieldHit(){ tone({freq:180,type:'square',gain:0.07,attack:0.002,release:0.2}); },
+    gameOver(){ tone({freq:440,type:'sawtooth',gain:0.06,attack:0.004,release:0.25, slideTo:180, slideTime:0.25}); },
+    restart(){ tone({freq:660,type:'triangle',gain:0.05,attack:0.003,release:0.12, slideTo:880, slideTime:0.08}); }
+  };
+  // Mute toggle
+  muteBtn.addEventListener('click', ()=>{
+    unlockAudio();
+    audio.enabled = !audio.enabled;
+    muteBtn.textContent = audio.enabled ? '🔊' : '🔇';
+    muteBtn.setAttribute('aria-pressed', String(!audio.enabled));
+  });
+  // Unlock on first interaction (mobile)
+  ['pointerdown','keydown'].forEach(evt=>document.addEventListener(evt, unlockAudio, {once:true}));
 
   /* ---------- Local Leaderboard (no backend) ---------- */
   const LS_KEY = 'knightRunnerTopScores_v1';
@@ -182,7 +241,6 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   }
   renderLeaderboard();
 
-  // Reset Scores button
   const resetBtn = document.getElementById('resetScores');
   if (resetBtn){
     resetBtn.addEventListener('click', ()=>{
@@ -193,15 +251,15 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     });
   }
 
-  /* ---------- Runtime state (declare early) ---------- */
+  /* ---------- Runtime state ---------- */
   let running = true;
   let speedMult = 1.0;
-  let slowFactor = 1.0;          // < 1.0 when Slow Time is active
-  let enemies = [];              // { ... }
-  let powerups = [];             // {el, type, x, y, expiresAt}
-  let shield = 0;                // hits remaining
-  let speedMoves = 0;            // knight moves remaining with speed boost
-  let slowUntil = 0;             // timestamp when slow ends
+  let slowFactor = 1.0;
+  let enemies = [];
+  let powerups = [];
+  let shield = 0;
+  let speedMoves = 0;
+  let slowUntil = 0;
 
   let spawnTimer, difficultyTimer;
   let startTime = performance.now();
@@ -267,7 +325,6 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   const POWER_TYPES = ['shield','speed','slow','clear'];
   const POWER_GLYPH = { shield:'🛡', speed:'⚡', slow:'🕒', clear:'💥' };
   function spawnPowerUp(){
-    // pick a random empty board square (top row excluded for clarity)
     let tries = 20;
     while (tries-- > 0){
       const x = Math.floor(Math.random()*SIZE);
@@ -279,8 +336,9 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
       el.style.left = `${x*CELL}px`; el.style.top = `${y*CELL}px`;
       el.innerHTML = `<div class="glyph">${POWER_GLYPH[type]}</div><div class="ring"></div>`;
       game.appendChild(el);
-      const expiresAt = performance.now() + 5500; // ~5.5s life
+      const expiresAt = performance.now() + 5500;
       powerups.push({el,type,x,y,expiresAt});
+      SFX.spawnPower();
       break;
     }
   }
@@ -297,12 +355,10 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   }
   function applyPower(type, x, y){
     sparkle(x,y);
-    if (type==='shield'){ shield = 1; bShield.classList.add('active'); }
-    if (type==='speed'){ speedMoves = 3; bSpeed.classList.add('active'); }
-    if (type==='slow'){ slowUntil = performance.now()+5000; slowFactor = 0.5; bSlow.classList.add('active'); }
-    if (type==='clear'){
-      enemies.forEach(e=>e.el.remove()); enemies = [];
-    }
+    if (type==='shield'){ shield = 1; bShield.classList.add('active'); SFX.pickupShield(); }
+    if (type==='speed'){ speedMoves = 3; bSpeed.classList.add('active'); SFX.pickupSpeed(); }
+    if (type==='slow'){ slowUntil = performance.now()+5000; slowFactor = 0.5; bSlow.classList.add('active'); SFX.pickupSlow(); }
+    if (type==='clear'){ enemies.forEach(e=>e.el.remove()); enemies = []; SFX.pickupClear(); }
   }
   function sparkle(x,y){
     for(let i=0;i<6;i++){
@@ -330,7 +386,6 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     const px = x*CELL, py = y*CELL;
 
     if (type === 'queen') {
-      // Queens: step to one of three squares in front (forward-left, forward, forward-right)
       const e = { el, type, px, py, qx:x, qy:y, qtx:x, qty:0, qtpX:x*CELL, qtpY:0, stepSpeed:BASE_SPEED.queen };
       pickNextQueenTarget(e);
       e.qtpX = e.qtx * CELL; e.qtpY = e.qty * CELL;
@@ -339,7 +394,6 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     }
 
     if (type === 'bishop') {
-      // Bishops: perfect diagonal stepper (x±1, y+1) with side bounce
       const dirX = (Math.random()<0.5) ? -1 : 1;
       const e = { el, type, px, py, bx:x, by:y, bdir:dirX, btx:x+dirX, bty:0, btpX:(x+dirX)*CELL, btpY:0, stepSpeed:BASE_SPEED.bishop };
       if (e.btx < 0 || e.btx >= SIZE) { e.bdir = -e.bdir; e.btx = e.bx + e.bdir; e.btpX = e.btx*CELL; }
@@ -347,7 +401,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
       enemies.push(e); return;
     }
 
-    // Pawns / Rooks: continuous downward velocity
+    // Pawns / Rooks
     let vxCells = 0, vyCells = BASE_SPEED[type];
     if (type === 'rook') { vxCells = 0; vyCells = BASE_SPEED.rook; }
     const e = { el, type, px, py, vxCells, vyCells };
@@ -375,7 +429,6 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     const next = Math.max(60, baseSpawnDelay / (speedMult * (slowFactor||1)));
     spawnTimer = setTimeout(function tick(){
       if (!running) return;
-      // 12% chance to spawn a power-up instead of an enemy
       if (Math.random() < 0.12) spawnPowerUp(); else spawnEnemy();
       scheduleSpawn();
     }, next);
@@ -383,7 +436,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   function scheduleDifficulty(){
     difficultyTimer = setInterval(()=>{
       if (!running) return;
-      speedMult += 0.4; // fast ramp, no cap
+      speedMult += 0.4;
       speedEl.textContent = `${(speedMult * (slowFactor||1)).toFixed(1)}×`;
       clearTimeout(spawnTimer);
       scheduleSpawn();
@@ -402,9 +455,9 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     const dtSec = dt / 1000;
 
     // expire powerups
-    const now = performance.now();
+    const nowT = performance.now();
     for (let i=powerups.length-1;i>=0;i--){
-      if (now > powerups[i].expiresAt){
+      if (nowT > powerups[i].expiresAt){
         powerups[i].el.classList.add('fade');
         setTimeout(()=>powerups[i].el.remove(), 450);
         powerups.splice(i,1);
@@ -412,7 +465,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     }
 
     // update slow status
-    if (slowUntil && now > slowUntil){ slowUntil = 0; slowFactor = 1.0; bSlow.classList.remove('active'); }
+    if (slowUntil && nowT > slowUntil){ slowUntil = 0; slowFactor = 1.0; bSlow.classList.remove('active'); }
     speedEl.textContent = `${(speedMult * (slowFactor||1)).toFixed(1)}×`;
 
     const effectiveMult = speedMult * (slowFactor||1);
@@ -455,7 +508,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
         }
 
       } else {
-        // Pawns/Rooks continuous
+        // Pawns/Rooks
         const vx = (e.vxCells||0) * CELL * effectiveMult;
         const vy = (e.vyCells||0) * CELL * effectiveMult;
         e.px = clampX(e.px + vx * dtSec);
@@ -464,26 +517,26 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
         e.el.style.top  = `${e.py}px`;
       }
 
-      // Collision (rounded to cells)
+      // Collision
       const ex = Math.round(e.px / CELL);
       const ey = Math.round(e.py / CELL);
       if (ex === knight.x && ey === knight.y){
         if (shield > 0){
           shield = 0; bShield.classList.remove('active');
-          // destroy that enemy and shake lightly
           e.el.remove(); enemies.splice(i,1);
           game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'), 220);
+          SFX.shieldHit();
           continue;
         } else {
           gameOver(); return;
         }
       }
 
-      // Remove off bottom (safety)
+      // Remove off bottom
       if (e.py > SIZE*CELL){ e.el.remove(); enemies.splice(i,1); }
     }
 
-    // Danger warning (any enemy can occupy a knight-reachable square next)
+    // Danger glow (enemy on a knight-reachable square)
     let danger = false;
     for (const o of knightOffsets){
       const tx = knight.x+o.x, ty = knight.y+o.y;
@@ -495,15 +548,19 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
 
   function checkCollision(){
     if (enemies.some(e => Math.round(e.px/CELL)===knight.x && Math.round(e.py/CELL)===knight.y)){
-      if (shield>0){ shield=0; bShield.classList.remove('active'); enemies = enemies.filter(e=>!(Math.round(e.px/CELL)===knight.x && Math.round(e.py/CELL)===knight.y)); }
-      else gameOver();
+      if (shield>0){
+        shield=0; bShield.classList.remove('active');
+        enemies = enemies.filter(e=>!(Math.round(e.px/CELL)===knight.x && Math.round(e.py/CELL)===knight.y));
+        SFX.shieldHit();
+      } else gameOver();
     }
   }
 
-  /* ---------- Knight movement helpers ---------- */
+  /* ---------- Knight movement ---------- */
   function moveKnightTo(tx, ty){
     if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) return;
     knight.x = tx; knight.y = ty; placeKnight();
+    SFX.jump();
     pickupAt(tx,ty);
     checkCollision();
     updateDots();
@@ -542,7 +599,6 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     const name = e.key.replace('Arrow','').toLowerCase();
     const dir = DIRS[name];
     if (!dir) return;
-    // If speed boost active, allow immediate second arrow without waiting? (Handled by transition already)
     processArrow(dir);
   });
 
@@ -555,6 +611,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     dots.forEach(d=>d.remove()); dots = [];
     hideArrowHighlight();
     game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'), 350);
+    SFX.gameOver();
 
     const over = document.createElement('div');
     over.id='over';
@@ -590,12 +647,10 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   }
 
   function restart(){
-    // cleanup
     enemies.forEach(e=>e.el.remove()); enemies = [];
     powerups.forEach(p=>p.el.remove()); powerups = [];
     const over = document.getElementById('over'); if (over) over.remove();
 
-    // reset state
     speedMult = 1.0; slowFactor = 1.0; slowUntil = 0;
     shield = 0; speedMoves = 0;
     bShield.classList.remove('active'); bSpeed.classList.remove('active'); bSlow.classList.remove('active');
@@ -609,6 +664,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     clearTimeout(spawnTimer); clearInterval(difficultyTimer);
     scheduleSpawn(); scheduleDifficulty();
     requestAnimationFrame(loop);
+    SFX.restart();
   }
 
   /* ---------- Kickoff ---------- */
