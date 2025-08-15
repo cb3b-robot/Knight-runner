@@ -3,468 +3,264 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Knight Runner — 8×8, Unicode, Two-Step Knight</title>
+<title>Knight Runner — All Moves Visible</title>
 <style>
-  :root{
-    --board: 600px;    /* overall board size */
-    --cell: 75px;      /* 600 / 8 = 75px per square */
-  }
-  * { box-sizing: border-box; }
-  body{
-    margin:0;
-    background:#111;
-    color:#fff;
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    display:flex; flex-direction:column; align-items:center; gap:12px;
-  }
-  h1{ margin:16px 12px 4px; font-size:clamp(20px,3vw,32px); letter-spacing:0.5px; }
-  .hud{
-    display:flex; gap:14px; align-items:center; font-weight:600;
-    text-shadow:0 1px 2px #0008;
-  }
-  .pill{
-    padding:6px 10px; border-radius:999px; background:#222; border:1px solid #333;
-  }
+:root{
+  --board:600px; --cell:75px;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:#111;
+  color:#fff;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  display:flex; flex-direction:column; align-items:center; gap:12px;
+}
+h1{ margin:16px 12px 4px; font-size:clamp(20px,3vw,32px); letter-spacing:0.5px; }
+.hud{
+  display:flex; gap:14px; align-items:center; font-weight:600;
+  text-shadow:0 1px 2px #0008;
+}
+.pill{
+  padding:6px 10px; border-radius:999px; background:#222; border:1px solid #333;
+}
 
-  /* Game board */
-  #game{
-    position:relative;
-    width:var(--board); height:var(--board);
-    border:4px solid #fff; border-radius:12px;
-    overflow:hidden;
-    box-shadow:0 12px 40px #0008, inset 0 0 0 1px #0006;
-    /* Chessboard background */
-    background:
-      linear-gradient(45deg, #f0d9b5 25%, transparent 25%) 0 0/var(--cell) var(--cell),
-      linear-gradient(-45deg, #f0d9b5 25%, transparent 25%) 0 calc(var(--cell)/2)/var(--cell) var(--cell),
-      linear-gradient(45deg, transparent 75%, #b58863 75%) calc(var(--cell)/2) calc(-1*var(--cell)/2)/var(--cell) var(--cell),
-      linear-gradient(-45deg, transparent 75%, #b58863 75%) calc(-1*var(--cell)/2) 0/var(--cell) var(--cell);
-  }
+/* Game board */
+#game{
+  position:relative;
+  width:var(--board); height:var(--board);
+  border:4px solid #fff; border-radius:12px;
+  overflow:hidden;
+  box-shadow:0 12px 40px #0008, inset 0 0 0 1px #0006;
+}
+.square{
+  position:absolute; width:var(--cell); height:var(--cell);
+}
+.light{ background:#f0d9b5; }
+.dark{ background:#b58863; }
 
-  /* Pieces */
-  .piece{
-    position:absolute; width:var(--cell); height:var(--cell);
-    display:flex; align-items:center; justify-content:center;
-    pointer-events:none; /* clicks go through to dots */
-    user-select:none;
-  }
-  .knight{
-    z-index:110;
-    color:#fff; text-shadow:0 0 0 #000, 0 2px 6px #0009;
-    font-size:52px;   /* good size within 75px square */
-  }
-  .enemy{
-    z-index:90;
-    color:#111;
-    background: #fff0; /* transparent, just glyph */
-    filter: drop-shadow(0 2px 2px rgba(0,0,0,.6));
-    font-size:50px;
-  }
+/* Pieces */
+.piece{
+  position:absolute; width:var(--cell); height:var(--cell);
+  display:flex; align-items:center; justify-content:center;
+  pointer-events:none;
+  user-select:none;
+}
+.knight{
+  z-index:110;
+  color:#fff; font-size:52px; text-shadow:0 2px 6px #0009;
+}
+.enemy{
+  z-index:90;
+  color:#111; filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));
+  font-size:50px;
+}
 
-  /* Green move dots */
-  .dot{
-    position:absolute; width:var(--cell); height:var(--cell);
-    display:flex; align-items:center; justify-content:center;
-    z-index:120; cursor:pointer; pointer-events:auto;
-  }
-  .dot span{
-    width:18px; height:18px; border-radius:50%;
-    background:#2ecc71; box-shadow:0 0 0 3px #2ecc7144, 0 2px 6px #0007;
-  }
-  .dot:active span{ transform:scale(.92); }
+/* Green move dots */
+.dot{
+  position:absolute; width:var(--cell); height:var(--cell);
+  display:flex; align-items:center; justify-content:center;
+  z-index:120; cursor:pointer;
+}
+.dot span{
+  width:18px; height:18px; border-radius:50%;
+  background:#2ecc71; box-shadow:0 0 0 3px #2ecc7144,0 2px 6px #0007;
+}
+.dot:active span{ transform:scale(.92); }
 
-  /* On-screen controls */
-  #pad{
-    display:grid; grid-template-columns:repeat(3,64px); grid-template-rows:repeat(3,64px);
-    gap:8px; margin:2px 0 18px;
-  }
-  .pad-btn{
-    display:flex; align-items:center; justify-content:center;
-    background:#fff; color:#111; border-radius:10px;
-    border:1px solid #ddd; font-weight:800; font-size:22px; cursor:pointer;
-    box-shadow:0 4px 18px #0005, inset 0 -2px 0 #0001;
-    user-select:none;
-  }
-  .pad-btn:active{ transform:translateY(1px); }
-  .empty{ background:transparent; border:none; box-shadow:none; }
+/* On-screen controls */
+#pad{
+  display:grid; grid-template-columns:repeat(3,64px); grid-template-rows:repeat(3,64px);
+  gap:8px; margin:2px 0 18px;
+}
+.pad-btn{
+  display:flex; align-items:center; justify-content:center;
+  background:#fff; color:#111; border-radius:10px;
+  border:1px solid #ddd; font-weight:800; font-size:22px; cursor:pointer;
+  box-shadow:0 4px 18px #0005, inset 0 -2px 0 #0001;
+  user-select:none;
+}
+.pad-btn:active{ transform:translateY(1px); }
+.empty{ background:transparent; border:none; box-shadow:none; }
 
-  /* Game over overlay */
-  #over{
-    position:absolute; inset:0; background:rgba(0,0,0,.55);
-    display:none; align-items:center; justify-content:center; flex-direction:column;
-    z-index:200; text-align:center; padding:20px;
-  }
-  #over h2{ margin:0 0 8px; font-size:36px; }
-  #over p{ margin:0 0 12px; opacity:.9 }
-  #restart{
-    padding:10px 14px; border-radius:10px; border:1px solid #fff4; background:#fff; color:#111; cursor:pointer; font-weight:700;
-  }
+/* Game over overlay */
+#over{
+  position:absolute; inset:0; background:rgba(0,0,0,.55);
+  display:none; align-items:center; justify-content:center; flex-direction:column;
+  z-index:200; text-align:center; padding:20px;
+}
+#over h2{ margin:0 0 8px; font-size:36px; }
+#over p{ margin:0 0 12px; opacity:.9 }
+#restart{
+  padding:10px 14px; border-radius:10px; border:1px solid #fff4; background:#fff; color:#111; cursor:pointer; font-weight:700;
+}
 
-  /* Responsive downscale on small screens */
-  @media (max-width:700px){
-    :root{ --board: 86vw; --cell: calc(var(--board)/8); }
-    .knight,.enemy{ font-size: calc(var(--cell) * 0.70); }
-    .dot span{ width: calc(var(--cell)*0.24); height: calc(var(--cell)*0.24); }
-  }
+@media (max-width:700px){
+  :root{ --board:86vw; --cell:calc(var(--board)/8); }
+  .knight,.enemy{ font-size:calc(var(--cell)*0.7); }
+  .dot span{ width:calc(var(--cell)*0.24); height:calc(var(--cell)*0.24); }
+}
 </style>
 </head>
 <body>
-  <h1>Knight Runner</h1>
-  <div class="hud">
-    <div class="pill">Score: <span id="score">0.0</span>s</div>
-    <div class="pill">Speed: <span id="speed">1.0×</span></div>
-  </div>
+<h1>Knight Runner</h1>
+<div class="hud">
+  <div class="pill">Score: <span id="score">0.0</span>s</div>
+  <div class="pill">Speed: <span id="speed">1.0×</span></div>
+</div>
+<div id="game"></div>
 
-  <div id="game" aria-label="8×8 chessboard"></div>
-
-  <!-- On-screen d-pad -->
-  <div id="pad" aria-label="On-screen arrow controls">
-    <div class="pad-btn empty"></div>
-    <div class="pad-btn" data-dir="up">↑</div>
-    <div class="pad-btn empty"></div>
-    <div class="pad-btn" data-dir="left">←</div>
-    <div class="pad-btn empty"></div>
-    <div class="pad-btn" data-dir="right">→</div>
-    <div class="pad-btn empty"></div>
-    <div class="pad-btn" data-dir="down">↓</div>
-    <div class="pad-btn empty"></div>
-  </div>
+<!-- On-screen d-pad -->
+<div id="pad">
+  <div class="pad-btn empty"></div>
+  <div class="pad-btn" data-dir="up">↑</div>
+  <div class="pad-btn empty"></div>
+  <div class="pad-btn" data-dir="left">←</div>
+  <div class="pad-btn empty"></div>
+  <div class="pad-btn" data-dir="right">→</div>
+  <div class="pad-btn empty"></div>
+  <div class="pad-btn" data-dir="down">↓</div>
+  <div class="pad-btn empty"></div>
+</div>
 
 <script>
 (() => {
-  const game = document.getElementById('game');
-  const scoreEl = document.getElementById('score');
-  const speedEl = document.getElementById('speed');
+const game = document.getElementById('game');
+const scoreEl = document.getElementById('score');
+const speedEl = document.getElementById('speed');
 
-  const CELL = 75; // also controlled by CSS var, but we use JS constant for math
-  const SIZE = 8;
+const CELL = 75;
+const SIZE = 8;
+const GLYPHS = { knight:'♘', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
 
-  // --- State ---
-  let knight = { x: 3, y: 6 }; // starting position
-  let enemies = []; // {el, x,y, type, dx, dy, extra}
-  let dots = [];    // clickable move targets
-  let firstStep = null; // {dx,dy, dir:{x,y}}
+let knight = {x:3,y:6};
+let enemies = [];
+let dots = [];
+let startTime = performance.now();
+let running = true;
+let baseEnemyMoveDelay = 700, baseSpawnDelay=900, minEnemyMoveDelay=220, minSpawnDelay=260;
 
-  // Difficulty
-  let startTime = performance.now();
-  let running = true;
-  let baseEnemyMoveDelay = 700;   // ms between enemy grid moves (will reduce)
-  let baseSpawnDelay     = 900;   // ms between spawns (will reduce)
-  const minEnemyMoveDelay = 220;
-  const minSpawnDelay     = 260;
-
-  // Unicode glyphs
-  const GLYPHS = { knight: '♘', pawn: '♟', rook: '♜', bishop: '♝', queen: '♛' };
-
-  // --- Helpers ---
-  const px = n => `${n * CELL}px`;
-
-  function place(el, x, y) {
-    el.style.left = px(x);
-    el.style.top  = px(y);
+// --- Chessboard squares ---
+for(let y=0;y<SIZE;y++){
+  for(let x=0;x<SIZE;x++){
+    const sq = document.createElement('div');
+    sq.className='square '+((x+y)%2? 'dark':'light');
+    sq.style.left=`${x*CELL}px`;
+    sq.style.top=`${y*CELL}px`;
+    game.appendChild(sq);
   }
+}
 
-  function clampBoard(pos){
-    pos.x = Math.max(0, Math.min(SIZE-1, pos.x));
-    pos.y = Math.max(0, Math.min(SIZE-1, pos.y));
-  }
+// --- Knight ---
+const knightEl = document.createElement('div');
+knightEl.className='piece knight'; knightEl.textContent=GLYPHS.knight;
+game.appendChild(knightEl);
+function placeKnight(){ knightEl.style.left=`${knight.x*CELL}px`; knightEl.style.top=`${knight.y*CELL}px`; }
+placeKnight();
 
-  function clearDots(){
-    dots.forEach(d => d.remove());
-    dots = [];
-  }
-
-  function showSecondStepDots(first){
-    clearDots();
-    // perpendicular unit vectors to first.dir
-    // if first.dir is vertical (0,±1), perps are (±1,0); if horizontal, perps are (0,±1)
-    const perps = Math.abs(first.dir.x) === 1 ? [{x:0,y:1},{x:0,y:-1}]
-                                              : [{x:1,y:0},{x:-1,y:0}];
-
-    perps.forEach(p => {
-      const target = { x: knight.x + first.dx + p.x, y: knight.y + first.dy + p.y };
-      if (target.x < 0 || target.x >= SIZE || target.y < 0 || target.y >= SIZE) return;
-
-      const dot = document.createElement('div');
-      dot.className = 'dot';
-      place(dot, target.x, target.y);
-      const inner = document.createElement('span');
-      dot.appendChild(inner);
-      dot.addEventListener('click', () => {
-        moveKnightTo(target.x, target.y);
-        firstStep = null;
-        clearDots();
-      });
-      game.appendChild(dot);
-      dots.push(dot);
-    });
-  }
-
-  function moveKnightTo(x, y){
-    knight.x = x; knight.y = y;
-    clampBoard(knight);
-    place(knightEl, knight.x, knight.y);
-    // After moving, we immediately check collision (if an enemy already there)
-    if (enemies.some(e => Math.round(e.x) === knight.x && Math.round(e.y) === knight.y)) {
-      gameOver();
-    }
-  }
-
-  // --- Render Knight ---
-  const knightEl = document.createElement('div');
-  knightEl.className = 'piece knight';
-  knightEl.textContent = GLYPHS.knight;
-  game.appendChild(knightEl);
-  place(knightEl, knight.x, knight.y);
-
-  // --- Enemies ---
-  function spawnEnemy(){
-    // Random piece type with weights
-    const r = Math.random();
-    let type = 'pawn';
-    if (r > 0.85) type = 'queen';
-    else if (r > 0.65) type = 'rook';
-    else if (r > 0.40) type = 'bishop';
-    // Spawn at top row just above board (y = -1) at random column
-    const x = Math.floor(Math.random() * SIZE);
-    const y = -1;
-    const el = document.createElement('div');
-    el.className = 'piece enemy';
-    el.textContent = GLYPHS[type];
-    el.style.color = '#111'; // glyph black-ish
-    game.appendChild(el);
-
-    // Movement vectors per type (grid per tick)
-    let dx = 0, dy = 1;
-    let extra = {};
-    if (type === 'pawn') { dx = 0; dy = 1; }
-    if (type === 'rook') { dx = 0; dy = 1; }
-    if (type === 'bishop') {
-      dy = 1; dx = Math.random() < 0.5 ? -1 : 1;
-    }
-    if (type === 'queen') {
-      dy = 1;
-      // queen: sometimes straight, sometimes diagonal; sometimes double step
-      extra.doubleChance = 0.33;
-      extra.diagChance   = 0.5;
-    }
-
-    const enemy = { el, x, y, type, dx, dy, extra };
-    place(el, x, y);
-    enemies.push(enemy);
-  }
-
-  function moveEnemiesOnce(){
-    for (let i = enemies.length - 1; i >= 0; i--){
-      const e = enemies[i];
-
-      const movesThisTick = (e.type === 'queen' && Math.random() < e.extra.doubleChance) ? 2 : 1;
-      for (let m = 0; m < movesThisTick; m++){
-        // Queen may switch straight/diagonal each internal move
-        if (e.type === 'queen'){
-          if (Math.random() < e.extra.diagChance) {
-            e.dx = Math.random() < 0.5 ? -1 : 1; e.dy = 1;
-          } else {
-            e.dx = 0; e.dy = 1;
-          }
-        }
-
-        e.x += e.dx; e.y += e.dy;
-
-        // Bounce bishops off side walls for fun
-        if (e.type === 'bishop'){
-          if (e.x < 0){ e.x = 0; e.dx = 1; }
-          if (e.x > SIZE-1){ e.x = SIZE-1; e.dx = -1; }
-        }
-
-        place(e.el, Math.round(e.x), Math.round(e.y));
-
-        // Collision with knight?
-        if (Math.round(e.x) === knight.x && Math.round(e.y) === knight.y){
-          gameOver();
-          return;
-        }
-
-        // Remove if off board
-        if (e.y > SIZE){
-          e.el.remove();
-          enemies.splice(i, 1);
-          break;
-        }
-      }
-    }
-  }
-
-  // --- Difficulty / Loop with dynamic intervals ---
-  let enemyMoveDelay = baseEnemyMoveDelay;
-  let spawnDelay     = baseSpawnDelay;
-
-  let enemyMoveTimer, spawnTimer, scoreTimer, difficultyTimer;
-
-  function scheduleEnemyMove(){
-    enemyMoveTimer = setTimeout(function tick(){
-      if (!running) return;
-      moveEnemiesOnce();
-      enemyMoveTimer = setTimeout(tick, enemyMoveDelay);
-    }, enemyMoveDelay);
-  }
-  function scheduleSpawn(){
-    spawnTimer = setTimeout(function tick(){
-      if (!running) return;
-      spawnEnemy();
-      spawnTimer = setTimeout(tick, spawnDelay);
-    }, 400); // small initial delay
-  }
-  function scheduleScore(){
-    scoreTimer = setInterval(()=>{
-      if (!running) return;
-      const sec = (performance.now() - startTime) / 1000;
-      scoreEl.textContent = sec.toFixed(1);
-    }, 100);
-  }
-  function scheduleDifficulty(){
-    difficultyTimer = setInterval(()=>{
-      if (!running) return;
-      // every 6 seconds, ramp difficulty
-      enemyMoveDelay = Math.max(minEnemyMoveDelay, enemyMoveDelay - 50);
-      spawnDelay     = Math.max(minSpawnDelay,     spawnDelay - 60);
-      const speedFactor = (baseEnemyMoveDelay / enemyMoveDelay).toFixed(1);
-      speedEl.textContent = `${speedFactor}×`;
-
-      // re-arm timers with new delays
-      clearTimeout(enemyMoveTimer);
-      clearTimeout(spawnTimer);
-      scheduleEnemyMove();
-      scheduleSpawn();
-    }, 6000);
-  }
-
-  // --- Two-step input (arrows & on-screen) ---
-  const DIRS = {
-    up:    {x:0,y:-1},
-    down:  {x:0,y: 1},
-    left:  {x:-1,y:0},
-    right: {x:1,y: 0},
-  };
-
-  function startFirstStep(dir){
-    const mv = DIRS[dir];
-    if (!mv) return;
-    firstStep = { dx: mv.x*2, dy: mv.y*2, dir: mv };
-    showSecondStepDots(firstStep);
-  }
-
-  function secondStep(dir){
-    if (!firstStep) return;
-
-    const mv = DIRS[dir];
-    if (!mv) return;
-
-    // Opposite cancels
-    if (mv.x === -firstStep.dir.x && mv.y === -firstStep.dir.y){
-      firstStep = null;
-      clearDots();
-      return;
-    }
-    // Must be perpendicular and magnitude 1
-    const dot = firstStep.dir.x*mv.x + firstStep.dir.y*mv.y;
-    const man = Math.abs(mv.x) + Math.abs(mv.y);
-    if (dot === 0 && man === 1){
-      const tx = knight.x + firstStep.dx + mv.x;
-      const ty = knight.y + firstStep.dy + mv.y;
-      if (tx>=0 && tx<SIZE && ty>=0 && ty<SIZE){
-        moveKnightTo(tx,ty);
-      }
-    }
-    firstStep = null;
-    clearDots();
-  }
-
-  // Keyboard handling: first press starts, second press completes/cancels
-  let awaitingSecond = false;
-  document.addEventListener('keydown', (e) => {
-    if (!running) return;
-    const keyMap = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right' };
-    const dir = keyMap[e.key];
-    if (!dir) return;
-
-    if (!awaitingSecond){
-      startFirstStep(dir);
-      awaitingSecond = true;
-    } else {
-      secondStep(dir);
-      awaitingSecond = false;
-    }
+// --- Show all possible knight moves ---
+const knightOffsets = [
+  {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
+  {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
+];
+function updateDots(){
+  dots.forEach(d=>d.remove()); dots=[];
+  if(!running) return;
+  knightOffsets.forEach(o=>{
+    const tx=knight.x+o.x, ty=knight.y+o.y;
+    if(tx<0||tx>=SIZE||ty<0||ty>=SIZE) return;
+    const dot = document.createElement('div'); dot.className='dot';
+    dot.style.left=`${tx*CELL}px`; dot.style.top=`${ty*CELL}px`;
+    const inner = document.createElement('span'); dot.appendChild(inner);
+    dot.addEventListener('click',()=>{ knight.x=tx; knight.y=ty; placeKnight(); checkCollision(); updateDots(); });
+    game.appendChild(dot); dots.push(dot);
   });
+}
 
-  // On-screen arrows
-  document.querySelectorAll('.pad-btn[data-dir]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      if (!running) return;
-      const dir = btn.dataset.dir;
-      if (!awaitingSecond){
-        startFirstStep(dir);
-        awaitingSecond = true;
-      } else {
-        secondStep(dir);
-        awaitingSecond = false;
-      }
-    });
+// --- Enemies ---
+function spawnEnemy(){
+  const r=Math.random(), types=['pawn','rook','bishop','queen'];
+  let type='pawn';
+  if(r>0.85) type='queen'; else if(r>0.65) type='rook'; else if(r>0.4) type='bishop';
+  const x=Math.floor(Math.random()*SIZE), y=-1;
+  const el=document.createElement('div'); el.className='piece enemy'; el.textContent=GLYPHS[type]; el.style.color='#111';
+  game.appendChild(el);
+  let dx=0,dy=1,extra={};
+  if(type==='bishop'){ dx=Math.random()<0.5?-1:1; dy=1; }
+  if(type==='queen'){ extra.diagChance=0.5; extra.doubleChance=0.33; }
+  enemies.push({el,x,y,type,dx,dy,extra});
+  placeEnemy(enemies[enemies.length-1]);
+}
+function placeEnemy(e){ e.el.style.left=`${e.x*CELL}px`; e.el.style.top=`${e.y*CELL}px`; }
+function moveEnemies(){
+  for(let i=enemies.length-1;i>=0;i--){
+    const e=enemies[i];
+    const moves=(e.type==='queen'&&Math.random()<e.extra.doubleChance)?2:1;
+    for(let m=0;m<moves;m++){
+      if(e.type==='queen'){ if(Math.random()<e.extra.diagChance){ e.dx=Math.random()<0.5?-1:1; e.dy=1; }else{ e.dx=0;e.dy=1; } }
+      e.x+=e.dx;e.y+=e.dy;
+      if(e.type==='bishop'){ if(e.x<0){e.x=0;e.dx=1;} if(e.x>SIZE-1){e.x=SIZE-1;e.dx=-1;} }
+      placeEnemy(e);
+      if(Math.round(e.x)===knight.x && Math.round(e.y)===knight.y) gameOver();
+      if(e.y>SIZE){ e.el.remove(); enemies.splice(i,1); break; }
+    }
+  }
+}
+
+// --- Collision check ---
+function checkCollision(){
+  if(enemies.some(e=>Math.round(e.x)===knight.x && Math.round(e.y)===knight.y)) gameOver();
+}
+
+// --- Loops ---
+let enemyMoveDelay=baseEnemyMoveDelay, spawnDelay=baseSpawnDelay;
+let enemyMoveTimer, spawnTimer, scoreTimer, difficultyTimer;
+function scheduleEnemyMove(){ enemyMoveTimer=setTimeout(function tick(){ if(!running) return; moveEnemies(); scheduleEnemyMove(); }, enemyMoveDelay); }
+function scheduleSpawn(){ spawnTimer=setTimeout(function tick(){ if(!running) return; spawnEnemy(); scheduleSpawn(); }, spawnDelay); }
+function scheduleScore(){ scoreTimer=setInterval(()=>{ if(!running) return; scoreEl.textContent=((performance.now()-startTime)/1000).toFixed(1); },100); }
+function scheduleDifficulty(){ difficultyTimer=setInterval(()=>{ if(!running) return; enemyMoveDelay=Math.max(minEnemyMoveDelay,enemyMoveDelay-50); spawnDelay=Math.max(minSpawnDelay,spawnDelay-60); speedEl.textContent=(baseEnemyMoveDelay/enemyMoveDelay).toFixed(1)+'×'; clearTimeout(enemyMoveTimer); clearTimeout(spawnTimer); scheduleEnemyMove(); scheduleSpawn(); },6000); }
+
+// --- Arrow keys ---
+const DIRS={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+document.addEventListener('keydown',e=>{
+  if(!running) return;
+  const dir=DIRS[e.key.replace('Arrow','').toLowerCase()]; if(!dir) return;
+  const tx=knight.x+dir.x, ty=knight.y+dir.y;
+  if(tx<0||tx>=SIZE||ty<0||ty>=SIZE) return;
+  knight.x=tx; knight.y=ty; placeKnight(); checkCollision(); updateDots();
+});
+
+// On-screen arrows
+document.querySelectorAll('.pad-btn[data-dir]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    if(!running) return;
+    const dir=DIRS[btn.dataset.dir]; if(!dir) return;
+    const tx=knight.x+dir.x, ty=knight.y+dir.y;
+    if(tx<0||tx>=SIZE||ty<0||ty>=SIZE) return;
+    knight.x=tx; knight.y=ty; placeKnight(); checkCollision(); updateDots();
   });
+});
 
-  // --- Game over + restart ---
-  function gameOver(){
-    if (!running) return;
-    running = false;
-    clearTimeout(enemyMoveTimer);
-    clearTimeout(spawnTimer);
-    clearInterval(scoreTimer);
-    clearInterval(difficultyTimer);
-    clearDots();
+// --- Game over / restart ---
+function gameOver(){
+  if(!running) return; running=false;
+  clearTimeout(enemyMoveTimer); clearTimeout(spawnTimer); clearInterval(scoreTimer); clearInterval(difficultyTimer);
+  dots.forEach(d=>d.remove()); dots=[];
+  const over=document.createElement('div'); over.id='over';
+  over.innerHTML=`<h2>Game Over</h2><p>You survived <strong>${scoreEl.textContent}s</strong></p><button id="restart">Play Again</button>`;
+  game.appendChild(over); over.style.display='flex';
+  document.getElementById('restart').addEventListener('click',restart);
+}
+function restart(){
+  enemies.forEach(e=>e.el.remove()); enemies=[]; dots.forEach(d=>d.remove()); dots=[];
+  const over=document.getElementById('over'); if(over) over.remove();
+  running=true; startTime=performance.now(); enemyMoveDelay=baseEnemyMoveDelay; spawnDelay=baseSpawnDelay;
+  speedEl.textContent='1.0×'; knight={x:3,y:6}; placeKnight(); updateDots();
+  scheduleEnemyMove(); scheduleSpawn(); scheduleScore(); scheduleDifficulty();
+}
 
-    const over = document.createElement('div');
-    over.id = 'over';
-    over.innerHTML = `
-      <h2>Game Over</h2>
-      <p>You survived <strong>${scoreEl.textContent}s</strong></p>
-      <button id="restart">Play Again</button>
-    `;
-    game.appendChild(over);
-    over.style.display = 'flex';
-    document.getElementById('restart').addEventListener('click', restart);
-  }
-
-  function restart(){
-    // Clean up
-    enemies.forEach(e => e.el.remove());
-    enemies = [];
-    const over = document.getElementById('over');
-    if (over) over.remove();
-    firstStep = null; clearDots();
-    running = true;
-
-    // Reset stats/difficulty
-    startTime = performance.now();
-    enemyMoveDelay = baseEnemyMoveDelay;
-    spawnDelay     = baseSpawnDelay;
-    speedEl.textContent = '1.0×';
-
-    // Reset knight
-    knight = { x: 3, y: 6 };
-    place(knightEl, knight.x, knight.y);
-
-    // Re-schedule loops
-    scheduleEnemyMove();
-    scheduleSpawn();
-    scheduleScore();
-    scheduleDifficulty();
-  }
-
-  // Kickoff
-  scheduleEnemyMove();
-  scheduleSpawn();
-  scheduleScore();
-  scheduleDifficulty();
+// --- Kickoff ---
+updateDots(); scheduleEnemyMove(); scheduleSpawn(); scheduleScore(); scheduleDifficulty();
 })();
 </script>
 </body>
