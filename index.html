@@ -14,7 +14,6 @@ body {
   align-items:center;
   color:#fff;
 }
-
 h1 { margin:10px; text-shadow:2px2px8px #000; }
 
 #game-container {
@@ -111,53 +110,52 @@ gameOverText.id='game-over';
 gameOverText.textContent='Game Over!';
 container.appendChild(gameOverText);
 
-const gridSize=75;
-let knightPos={x:4,y:4};
-let score=0;
-let obstacles=[];
+const gridSize = 75;
+let knightPos = {x:4, y:4};
+let score = 0;
+let obstacles = [];
 
-const knightMoves={
-"up-left":[{x:-2,y:-1},{x:-1,y:-2}],
-"up-right":[{x:2,y:-1},{x:1,y:-2}],
-"right-up":[{x:1,y:-2},{x:2,y:-1}],
-"right-down":[{x:1,y:2},{x:2,y:1}],
-"down-right":[{x:2,y:1},{x:1,y:2}],
-"down-left":[{x:-2,y:1},{x:-1,y:2}],
-"left-down":[{x:-1,y:2},{x:-2,y:1}],
-"left-up":[{x:-1,y:-2},{x:-2,y:-1}]
-};
+// True knight moves
+const knightMoves = [
+  {x:2,y:1}, {x:1,y:2}, {x:-1,y:2}, {x:-2,y:1},
+  {x:-2,y:-1}, {x:-1,y:-2}, {x:1,y:-2}, {x:2,y:-1}
+];
 
 function placeKnight(){
-  knight.style.left=`${knightPos.x*gridSize + 12.5}px`;
-  knight.style.top=`${knightPos.y*gridSize + 12.5}px`;
+  knight.style.left = `${knightPos.x*gridSize + 12.5}px`;
+  knight.style.top = `${knightPos.y*gridSize + 12.5}px`;
 }
 
 function addObstacle(){
-  const obs=document.createElement('div');
+  const obs = document.createElement('div');
   obs.classList.add('obstacle');
   obs.textContent = "P";
-  let posX=Math.floor(Math.random()*8);
-  obs.style.left=`${posX*gridSize +12.5}px`;
-  obs.style.top=`-50px`;
+  let posX = Math.floor(Math.random()*8);
+  obs.style.left = `${posX*gridSize +12.5}px`;
+  obs.style.top = `-50px`;
   container.appendChild(obs);
-  obstacles.push({el:obs,x:posX,y:-0.5});
+  obstacles.push({el: obs, x: posX, y: -0.5});
 }
 
 function moveObstacles(){
-  obstacles.forEach((o,index)=>{
-    o.y+=0.05;
-    o.el.style.top=`${o.y*gridSize}px`;
-    if(Math.floor(o.y)===knightPos.y && o.x===knightPos.x){gameOver();}
-    if(o.y>8){ o.el.remove(); obstacles.splice(index,1); score++; scoreDisplay.textContent=`Score:${score}`; }
+  obstacles.forEach((o, index)=>{
+    o.y += 0.05;
+    o.el.style.top = `${o.y*gridSize}px`;
+    if(Math.floor(o.y) === knightPos.y && o.x === knightPos.x){
+      gameOver();
+    }
+    if(o.y > 8){ o.el.remove(); obstacles.splice(index,1); score++; scoreDisplay.textContent = `Score:${score}`; }
   });
 }
 
-function moveKnight(dir){
-  const moves=knightMoves[dir];
-  if(!moves) return;
-  knightPos.x+=moves[0].x; knightPos.y+=moves[0].y;
-  constrainPosition(); placeKnight();
-  setTimeout(()=>{ knightPos.x+=moves[1].x; knightPos.y+=moves[1].y; constrainPosition(); placeKnight(); },100);
+// Move knight based on chosen L-shape
+function moveKnight(dirIndex){
+  const move = knightMoves[dirIndex];
+  if(!move) return;
+  knightPos.x += move.x;
+  knightPos.y += move.y;
+  constrainPosition();
+  placeKnight();
 }
 
 function constrainPosition(){
@@ -167,22 +165,30 @@ function constrainPosition(){
   if(knightPos.y>7) knightPos.y=7;
 }
 
-function gameOver(){ clearInterval(gameInterval); gameOverText.style.display='block'; }
+function gameOver(){ 
+  clearInterval(moveInterval); 
+  clearInterval(spawnInterval);
+  gameOverText.style.display='block'; 
+}
 
-// Keyboard
-document.addEventListener('keydown',e=>{
+// Map keyboard arrows to L-shaped moves
+document.addEventListener('keydown', e=>{
   switch(e.key){
-    case "ArrowUp": moveKnight("up-left"); break;
-    case "ArrowDown": moveKnight("down-right"); break;
-    case "ArrowLeft": moveKnight("left-up"); break;
-    case "ArrowRight": moveKnight("right-down"); break;
+    case "ArrowUp": moveKnight(5); break;   // example: up-left
+    case "ArrowDown": moveKnight(2); break; // example: down-left
+    case "ArrowLeft": moveKnight(6); break; // left moves
+    case "ArrowRight": moveKnight(1); break;// right moves
   }
 });
 
-// OSD buttons
-document.querySelectorAll('.osd-button').forEach(btn=>{btn.addEventListener('click',()=>moveKnight(btn.dataset.dir));});
+// On-screen buttons (map to knightMoves indices 0-7)
+document.querySelectorAll('.osd-button').forEach((btn, i)=>{
+  btn.addEventListener('click', ()=> moveKnight(i));
+});
 
-let gameInterval=setInterval(()=>{ addObstacle(); moveObstacles(); },20);
+// Intervals
+let moveInterval = setInterval(()=>{ moveObstacles(); }, 20);
+let spawnInterval = setInterval(()=>{ addObstacle(); }, 800);
 
 placeKnight();
 </script>
