@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Knight Runner — Sounds, Power-ups & Leaderboard</title>
+<title>Knight Runner — Music, Sounds, Power-ups & Leaderboard</title>
 <style>
 :root{--board:600px;--cell:75px;}
 *{box-sizing:border-box;}
@@ -157,12 +157,12 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   const CELL = 75, SIZE = 8;
   const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
 
-  /* ---------- Tiny Audio Engine (no files) ---------- */
+  /* ---------- Audio Engine (SFX + Background Music) ---------- */
+  const MUTE_KEY = 'KR_mute';
   let audio = { ctx:null, enabled:true, unlocked:false };
-  function ensureAudio(){
-    if (audio.ctx) return;
-    audio.ctx = new (window.AudioContext||window.webkitAudioContext)();
-  }
+  // restore mute state
+  try{ audio.enabled = localStorage.getItem(MUTE_KEY)!=='true' ? true : false; }catch{}
+  function ensureAudio(){ if (audio.ctx) return; audio.ctx = new (window.AudioContext||window.webkitAudioContext)(); }
   function unlockAudio(){
     ensureAudio();
     if (audio.unlocked) return;
@@ -171,6 +171,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     silent.connect(audio.ctx.destination);
     try { silent.start(0); } catch {}
     audio.unlocked = true;
+    Music.start(); // start music on first gesture
   }
   function now(){ ensureAudio(); return audio.ctx.currentTime; }
   function tone({freq=440, type='sine', dur=0.12, gain=0.05, attack=0.002, release=0.08, slideTo=null, slideTime=0.08}){
@@ -179,17 +180,15 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     const t0 = now();
     const osc = audio.ctx.createOscillator();
     const g = audio.ctx.createGain();
-    osc.type = type;
-    osc.frequency.value = freq;
+    const f = audio.ctx.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.value = 8000; // gentle tone
+    osc.type = type; osc.frequency.value = freq;
     g.gain.setValueAtTime(0, t0);
     g.gain.linearRampToValueAtTime(gain, t0+attack);
-    if (slideTo!=null){
-      osc.frequency.setValueAtTime(freq, t0);
-      osc.frequency.linearRampToValueAtTime(slideTo, t0+slideTime);
-    }
+    if (slideTo!=null){ osc.frequency.setValueAtTime(freq, t0); osc.frequency.linearRampToValueAtTime(slideTo, t0+slideTime); }
     g.gain.setValueAtTime(gain, t0+dur);
     g.gain.linearRampToValueAtTime(0.0001, t0+dur+release);
-    osc.connect(g); g.connect(audio.ctx.destination);
+    osc.connect(f); f.connect(g); g.connect(audio.ctx.destination);
     osc.start(t0); osc.stop(t0+dur+release+0.02);
   }
   const SFX = {
@@ -203,17 +202,136 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     gameOver(){ tone({freq:440,type:'sawtooth',gain:0.06,attack:0.004,release:0.25, slideTo:180, slideTime:0.25}); },
     restart(){ tone({freq:660,type:'triangle',gain:0.05,attack:0.003,release:0.12, slideTo:880, slideTime:0.08}); }
   };
+
+  // Procedural background music (soft medieval-ish loop)
+  // Mode: A minor-ish; simple arpeggios & pads, 8-bar loop (~16s)
+  const Music = (() => {
+    let master, padGain, arpGain, delay, feedback, lowpass;
+    let playing = false, timer = null, step = 0;
+
+    function init() {
+      ensureAudio();
+      if (master) return;
+      master = audio.ctx.createGain();
+      padGain = audio.ctx.createGain();
+      arpGain = audio.ctx.createGain();
+      delay = audio.ctx.createDelay(1.0); delay.delayTime.value = 0.22;
+      feedback = audio.ctx.createGain(); feedback.gain.value = 0.25;
+      lowpass = audio.ctx.createBiquadFilter(); lowpass.type='lowpass'; lowpass.frequency.value = 2000;
+
+      // gentle volumes
+      master.gain.value = 0.18; // global music volume (quiet)
+      padGain.gain.value = 0.35;
+      arpGain.gain.value = 0.45;
+
+      // wiring: (arp+pad)->lowpass->delay->feedback->lowpass->master->dest
+      const dest = audio.ctx.destination;
+      const musicBus = audio.ctx.createGain();
+      padGain.connect(musicBus); arpGain.connect(musicBus);
+      musicBus.connect(lowpass);
+      lowpass.connect(delay); delay.connect(feedback); feedback.connect(delay);
+      delay.connect(master); lowpass.connect(master);
+      master.connect(dest);
+    }
+
+    // helper: schedule a short pluck/arp note
+    function playNote({freq, when, dur=0.22, type='triangle', gain=0.25, target=arpGain}) {
+      if (!audio.enabled) return;
+      const osc = audio.ctx.createOscillator();
+      const g = audio.ctx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, when);
+      g.gain.linearRampToValueAtTime(gain, when+0.01);
+      // slight decay for pluck
+      g.gain.exponentialRampToValueAtTime(0.0001, when+dur);
+      osc.connect(g); g.connect(target);
+      osc.start(when); osc.stop(when+dur+0.02);
+    }
+
+    // helper: soft pad chord (two detuned sines)
+    function playPad({freq, when, dur=3.8, gain=0.10}) {
+      if (!audio.enabled) return;
+      const o1 = audio.ctx.createOscillator();
+      const o2 = audio.ctx.createOscillator();
+      const g = audio.ctx.createGain();
+      o1.type='sine'; o2.type='sine';
+      o1.frequency.value = freq;
+      o2.frequency.value = freq * 2 ** (7/1200); // ~7 cents detune
+      const t0 = when;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(gain, t0+0.8);
+      g.gain.linearRampToValueAtTime(0.0001, t0+dur);
+      o1.connect(g); o2.connect(g); g.connect(padGain);
+      o1.start(t0); o2.start(t0);
+      o1.stop(t0+dur+0.1); o2.stop(t0+dur+0.1);
+    }
+
+    // scale helper
+    function mtof(n){ return 440 * Math.pow(2,(n-69)/12); } // MIDI->freq
+
+    // Simple 16-step pattern; chords Am, F, C, G (i.e., A, F, C, G roots)
+    const roots = [57, 53, 60, 55]; // A3, F3, C4, G3
+    const arpPattern = [0, 7, 12, 7, 0, 7, 12, 14]; // intervals in semitones
+    const stepDur = 0.5; // seconds per step (~120 BPM)
+
+    function tick() {
+      if (!playing || !audio.enabled) return;
+      const t = now();
+      const bar = Math.floor(step / 4);         // 4 steps per bar
+      const chordIdx = Math.floor(bar % roots.length);
+      const root = roots[chordIdx];
+
+      // every bar, schedule a soft pad root+5th
+      if (step % 4 === 0) {
+        playPad({freq:mtof(root), when:t+0.01, dur:3.8});
+        playPad({freq:mtof(root+7), when:t+0.01, dur:3.8, gain:0.08});
+      }
+
+      // arpeggio note this step
+      const intv = arpPattern[step % arpPattern.length];
+      playNote({freq:mtof(root+intv), when:t+0.02, dur:0.24, type:'triangle', gain:0.18});
+
+      step++;
+    }
+
+    function start(){
+      init();
+      if (playing) return;
+      playing = true;
+      // run immediately and then on an interval; also schedule one step ahead to avoid drift
+      tick();
+      timer = setInterval(()=>tick(), stepDur*1000);
+    }
+    function stop(){
+      if (!playing) return;
+      playing = false;
+      if (timer){ clearInterval(timer); timer = null; }
+    }
+    function setEnabled(on){
+      master && (master.gain.value = on ? 0.18 : 0.0);
+    }
+    return { start, stop, setEnabled };
+  })();
+
   // Mute toggle
+  function applyMuteUI(){
+    muteBtn.textContent = audio.enabled ? '🔊' : '🔇';
+    muteBtn.setAttribute('aria-pressed', String(!audio.enabled));
+    Music.setEnabled(audio.enabled);
+  }
+  applyMuteUI();
+
   muteBtn.addEventListener('click', ()=>{
     unlockAudio();
     audio.enabled = !audio.enabled;
-    muteBtn.textContent = audio.enabled ? '🔊' : '🔇';
-    muteBtn.setAttribute('aria-pressed', String(!audio.enabled));
+    try{ localStorage.setItem(MUTE_KEY, String(!audio.enabled)); }catch{}
+    applyMuteUI();
   });
-  // Unlock on first interaction (mobile)
+  // Unlock (and start music) on first interaction (mobile-safe)
   ['pointerdown','keydown'].forEach(evt=>document.addEventListener(evt, unlockAudio, {once:true}));
 
-  /* ---------- Local Leaderboard (no backend) ---------- */
+  /* ---------- Local Leaderboard ---------- */
   const LS_KEY = 'knightRunnerTopScores_v1';
   function loadScores(){ try{const raw=localStorage.getItem(LS_KEY);const a=raw?JSON.parse(raw):[];return Array.isArray(a)?a:[]}catch{ return [] } }
   function saveScores(arr){ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }
@@ -251,7 +369,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     });
   }
 
-  /* ---------- Runtime state ---------- */
+  /* ---------- Game State ---------- */
   let running = true;
   let speedMult = 1.0;
   let slowFactor = 1.0;
@@ -282,10 +400,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   knightEl.className = 'piece knight';
   knightEl.textContent = GLYPHS.knight;
   game.appendChild(knightEl);
-  const placeKnight = () => {
-    knightEl.style.left = `${knight.x*CELL}px`;
-    knightEl.style.top  = `${knight.y*CELL}px`;
-  };
+  const placeKnight = () => { knightEl.style.left = `${knight.x*CELL}px`; knightEl.style.top  = `${knight.y*CELL}px`; };
   placeKnight();
 
   /* First-arrow highlight */
@@ -311,10 +426,8 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     for (const o of knightOffsets){
       const tx = knight.x + o.x, ty = knight.y + o.y;
       if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) continue;
-      const dot = document.createElement('div');
-      dot.className = 'dot';
-      dot.style.left = `${tx*CELL}px`;
-      dot.style.top  = `${ty*CELL}px`;
+      const dot = document.createElement('div'); dot.className = 'dot';
+      dot.style.left = `${tx*CELL}px`; dot.style.top  = `${ty*CELL}px`;
       const inner = document.createElement('span'); dot.appendChild(inner);
       dot.addEventListener('click', () => { moveKnightTo(tx, ty); });
       game.appendChild(dot); dots.push(dot);
@@ -370,7 +483,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     }
   }
 
-  /* ---------- Enemy behavior ---------- */
+  /* ---------- Enemies ---------- */
   const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 }; // cells/sec
 
   function spawnEnemy(){
@@ -612,6 +725,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     hideArrowHighlight();
     game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'), 350);
     SFX.gameOver();
+    Music.stop(); // pause background music
 
     const over = document.createElement('div');
     over.id='over';
@@ -665,6 +779,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     scheduleSpawn(); scheduleDifficulty();
     requestAnimationFrame(loop);
     SFX.restart();
+    Music.start(); // resume background music
   }
 
   /* ---------- Kickoff ---------- */
@@ -672,6 +787,9 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   scheduleSpawn();
   scheduleDifficulty();
   requestAnimationFrame(loop);
+
+  // If user had page muted previously, reflect it
+  applyMuteUI();
 })();
 </script>
 </body>
