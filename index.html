@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Knight Runner — Dots + Arrows Restored</title>
+<title>Knight Runner — Fixed Init Order</title>
 <style>
 :root{--board:600px;--cell:75px;}
 *{box-sizing:border-box;}
@@ -24,36 +24,20 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
 .dark{background:#b58863;}
 
 /* Pieces */
-.piece{
-  position:absolute;width:var(--cell);height:var(--cell);
-  display:flex;align-items:center;justify-content:center;
-  pointer-events:none;user-select:none;
-}
+.piece{position:absolute;width:var(--cell);height:var(--cell);display:flex;align-items:center;justify-content:center;pointer-events:none;user-select:none;}
 .knight{z-index:110;color:#fff;font-size:52px;text-shadow:0 2px 6px #0009;}
 .enemy{z-index:90;color:#111;font-size:50px;filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));}
 
 /* Knight move dots */
-.dot{
-  position:absolute;width:var(--cell);height:var(--cell);
-  display:flex;align-items:center;justify-content:center;
-  z-index:120;cursor:pointer;
-}
+.dot{position:absolute;width:var(--cell);height:var(--cell);display:flex;align-items:center;justify-content:center;z-index:120;cursor:pointer;}
 .dot span{width:18px;height:18px;border-radius:50%;background:#2ecc71;box-shadow:0 0 0 3px #2ecc7144,0 2px 6px #0007;}
 .dot:active span{transform:scale(.92);}
 
 /* First-arrow highlight */
-#arrowHighlight{
-  position:absolute;width:var(--cell);height:var(--cell);
-  border:2px solid #2ecc71;border-radius:8px;pointer-events:none;
-  transition:all .15s ease;z-index:130;display:none;
-}
+#arrowHighlight{position:absolute;width:var(--cell);height:var(--cell);border:2px solid #2ecc71;border-radius:8px;pointer-events:none;transition:all .15s ease;z-index:130;display:none;}
 
 /* Game over overlay */
-#over{
-  position:absolute;inset:0;background:rgba(0,0,0,.55);
-  display:none;align-items:center;justify-content:center;flex-direction:column;
-  z-index:200;text-align:center;padding:20px;
-}
+#over{position:absolute;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;flex-direction:column;z-index:200;text-align:center;padding:20px;}
 #over h2{margin:0 0 8px;font-size:36px;}
 #over p{margin:0 0 12px;opacity:.9;}
 #restart{padding:10px 14px;border-radius:10px;border:1px solid #fff4;background:#fff;color:#111;cursor:pointer;font-weight:700;}
@@ -82,7 +66,15 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   const CELL = 75, SIZE = 8;
   const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
 
-  // Build board
+  /* --- Declare runtime state EARLY (fixes init-order bug) --- */
+  let running = true;               // must exist before updateDots() checks it
+  let speedMult = 1.0;              // difficulty multiplier (infinite ramp)
+  let enemies = [];                 // {el, px, py, type, vxCells, vyCells, queenTurnMs}
+  let spawnTimer, difficultyTimer;  // timers
+  let startTime = performance.now();
+  let lastTime  = startTime;
+
+  /* --- Build board --- */
   for (let y=0;y<SIZE;y++){
     for (let x=0;x<SIZE;x++){
       const sq = document.createElement('div');
@@ -92,7 +84,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     }
   }
 
-  // Knight
+  /* --- Knight --- */
   let knight = { x:3, y:6 };
   const knightEl = document.createElement('div');
   knightEl.className = 'piece knight';
@@ -112,7 +104,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   };
   const hideArrowHighlight = () => { arrowHighlight.style.display='none'; };
 
-  // Dots (all knight moves)
+  /* --- Knight move dots --- */
   const knightOffsets = [
     {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
     {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
@@ -136,45 +128,31 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
       game.appendChild(dot); dots.push(dot);
     }
   }
-  updateDots();
 
-  // Enemies (smooth, continuous)
-  const BASE_SPEED = {           // cells per second (scaled by speedMult)
-    pawn:   1.15,
-    bishop: 2.20,  // 2× faster bishops
-    rook:   3.00,  // fast plunge
-    queen:  1.35
-  };
-  const LATERAL_SPEED = { bishop: 0.95, queen: 0.95 };
-
-  let enemies = []; // {el, px, py, type, vxCells, vyCells, queenTurnMs}
+  /* --- Enemies (continuous motion) --- */
+  const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 };   // cells/sec
+  const LATERAL_SPEED = { bishop:0.95, queen:0.95 };
 
   function spawnEnemy(){
     const r = Math.random();
-    let type = 'pawn';
-    if (r > 0.85) type = 'queen';
-    else if (r > 0.65) type = 'rook';
-    else if (r > 0.40) type = 'bishop';
-
-    const x = Math.floor(Math.random()*SIZE);
-    const y = -1;
+    let type = (r>0.85) ? 'queen' : (r>0.65) ? 'rook' : (r>0.40) ? 'bishop' : 'pawn';
+    const x = Math.floor(Math.random()*SIZE), y = -1;
 
     const el = document.createElement('div');
     el.className = 'piece enemy';
     el.textContent = GLYPHS[type];
     game.appendChild(el);
 
-    const px = x*CELL;
-    const py = y*CELL;
-
+    const px = x*CELL, py = y*CELL;
     let vxCells = 0, vyCells = BASE_SPEED[type];
-    if (type === 'rook') { vxCells = 0; vyCells = BASE_SPEED.rook; }
+    if (type === 'rook')   { vxCells = 0; vyCells = BASE_SPEED.rook; }
     if (type === 'bishop') { vxCells = (Math.random()<0.5 ? -1 : 1) * LATERAL_SPEED.bishop; }
+
     let queenTurnMs = 0;
-    if (type === 'queen') {
+    if (type === 'queen'){
       const choice = [-1,0,1][Math.floor(Math.random()*3)];
       vxCells = choice * LATERAL_SPEED.queen;
-      queenTurnMs = 250 + Math.random()*300; // next change in 250–550ms
+      queenTurnMs = 250 + Math.random()*300;
     }
 
     const e = { el, px, py, type, vxCells, vyCells, queenTurnMs };
@@ -182,25 +160,16 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     enemies.push(e);
   }
 
-  // Continuous loop
-  let running = true;
-  let startTime = performance.now();
-  let lastTime = performance.now();
-
-  // Difficulty ramp (infinite)
-  let speedMult = 1.0;
-  const baseSpawnDelay = 1500;
-  let spawnTimer, difficultyTimer;
-
+  /* --- Difficulty / spawning --- */
+  const baseSpawnDelay = 1500; // ms (will be divided by speedMult)
   function scheduleSpawn(){
-    const next = Math.max(60, baseSpawnDelay / speedMult); // tiny floor prevents zero/negative
+    const next = Math.max(60, baseSpawnDelay / speedMult); // tiny floor
     spawnTimer = setTimeout(function tick(){
       if (!running) return;
       spawnEnemy();
       scheduleSpawn();
     }, next);
   }
-
   function scheduleDifficulty(){
     difficultyTimer = setInterval(()=>{
       if (!running) return;
@@ -212,6 +181,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     }, 6000);
   }
 
+  /* --- Movement & collisions --- */
   function clampX(px){
     if (px < 0) return 0;
     const max = (SIZE-1)*CELL;
@@ -224,7 +194,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     for (let i=enemies.length-1;i>=0;i--){
       const e = enemies[i];
 
-      // Queens: change lateral randomly every few hundred ms
+      // Queens: random lateral changes
       if (e.type === 'queen'){
         e.queenTurnMs -= dt;
         if (e.queenTurnMs <= 0){
@@ -240,7 +210,6 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
         if (nextPx < 0 || nextPx > (SIZE-1)*CELL){ e.vxCells = -e.vxCells; }
       }
 
-      // Convert cells/sec to px/sec via speed multiplier
       const vx = e.vxCells * CELL * speedMult;
       const vy = e.vyCells * CELL * speedMult;
 
@@ -250,16 +219,11 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
       e.el.style.left = `${e.px}px`;
       e.el.style.top  = `${e.py}px`;
 
-      // Collision check (rounded cell positions)
       const ex = Math.round(e.px / CELL);
       const ey = Math.round(e.py / CELL);
       if (ex === knight.x && ey === knight.y){ gameOver(); return; }
 
-      // Remove off-board
-      if (e.py > SIZE*CELL){
-        e.el.remove();
-        enemies.splice(i,1);
-      }
+      if (e.py > SIZE*CELL){ e.el.remove(); enemies.splice(i,1); }
     }
   }
 
@@ -277,20 +241,18 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     requestAnimationFrame(loop);
   }
 
-  // Keyboard: true knight two-step via arrows
+  /* --- Keyboard: true knight two-step --- */
   const DIRS = { up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
   let arrowStep = 0, firstArrow = null;
 
   function processArrow(dir){
-    if (arrowStep === 0){
-      firstArrow = dir; arrowStep = 1; showArrowHighlight(dir); return;
-    }
+    if (arrowStep === 0){ firstArrow = dir; arrowStep = 1; showArrowHighlight(dir); return; }
     const dx2 = firstArrow.x * 2, dy2 = firstArrow.y * 2;
     let tx = knight.x, ty = knight.y;
 
-    if (firstArrow.x !== 0 && dir.y !== 0){ tx += dx2; ty += dir.y; }      // long horizontal, short vertical
-    else if (firstArrow.y !== 0 && dir.x !== 0){ tx += dir.x; ty += dy2; } // long vertical, short horizontal
-    else if (firstArrow.x === -dir.x && firstArrow.y === -dir.y){ arrowStep=0; firstArrow=null; hideArrowHighlight(); return; } // cancel
+    if (firstArrow.x !== 0 && dir.y !== 0){ tx += dx2; ty += dir.y; }
+    else if (firstArrow.y !== 0 && dir.x !== 0){ tx += dir.x; ty += dy2; }
+    else if (firstArrow.x === -dir.x && firstArrow.y === -dir.y){ arrowStep=0; firstArrow=null; hideArrowHighlight(); return; }
     else { arrowStep=0; firstArrow=null; hideArrowHighlight(); return; }
 
     if (tx<0||tx>=SIZE||ty<0||ty>=SIZE){ arrowStep=0; firstArrow=null; hideArrowHighlight(); return; }
@@ -307,7 +269,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     processArrow(dir);
   });
 
-  // Game over / restart
+  /* --- Game over / restart --- */
   function gameOver(){
     if (!running) return;
     running = false;
@@ -340,7 +302,8 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     requestAnimationFrame(loop);
   }
 
-  // Kickoff
+  /* --- Kickoff (safe order) --- */
+  updateDots();          // safe: running is already declared
   scheduleSpawn();
   scheduleDifficulty();
   requestAnimationFrame(loop);
