@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Knight Runner Two-Step Move</title>
+<title>Knight Runner with Multiple Pieces</title>
 <style>
 body {
   margin:0;
@@ -50,7 +50,6 @@ h1 { margin:10px; text-shadow:2px2px8px #000; }
 .obstacle {
   width:50px;
   height:50px;
-  background:blue;
   color:white;
   font-weight:bold;
   font-size:30px;
@@ -59,6 +58,7 @@ h1 { margin:10px; text-shadow:2px2px8px #000; }
   align-items:center;
   position:absolute;
   z-index:50;
+  border-radius:5px;
 }
 
 #osd-controls { margin-top:10px; display:flex; flex-wrap:wrap; width:250px; justify-content:center; gap:5px; }
@@ -80,7 +80,7 @@ h1 { margin:10px; text-shadow:2px2px8px #000; }
 </style>
 </head>
 <body>
-<h1>Knight Runner Two-Step Move</h1>
+<h1>Knight Runner: Chess Pieces</h1>
 <div id="game-container"></div>
 <div id="score">Score:0</div>
 <div id="osd-controls">
@@ -111,33 +111,13 @@ let knightPos = {x:4, y:4};
 let score = 0;
 let obstacles = [];
 
+// Helper to place knight
 function placeKnight(){
   knight.style.left = `${knightPos.x*gridSize + 12.5}px`;
   knight.style.top = `${knightPos.y*gridSize + 12.5}px`;
 }
 
-function addObstacle(){
-  const obs = document.createElement('div');
-  obs.classList.add('obstacle');
-  obs.textContent = "P";
-  let posX = Math.floor(Math.random()*8);
-  obs.style.left = `${posX*gridSize +12.5}px`;
-  obs.style.top = `-50px`;
-  container.appendChild(obs);
-  obstacles.push({el: obs, x: posX, y: -0.5});
-}
-
-function moveObstacles(){
-  obstacles.forEach((o, index)=>{
-    o.y += 0.05;
-    o.el.style.top = `${o.y*gridSize}px`;
-    if(Math.floor(o.y) === knightPos.y && o.x === knightPos.x){
-      gameOver();
-    }
-    if(o.y > 8){ o.el.remove(); obstacles.splice(index,1); score++; scoreDisplay.textContent = `Score:${score}`; }
-  });
-}
-
+// Constrain knight inside board
 function constrainPosition(pos){
   if(pos.x<0) pos.x=0;
   if(pos.y<0) pos.y=0;
@@ -146,7 +126,7 @@ function constrainPosition(pos){
 }
 
 // --- Two-step knight move ---
-let firstStep = null; // store first click info
+let firstStep = null;
 const dirMap = {
   'up': {x:0, y:-1},
   'down': {x:0, y:1},
@@ -159,7 +139,7 @@ function handleStep(dir){
   if(!move) return;
 
   if(!firstStep){
-    // First click: 2 squares in that direction
+    // First click: 2 squares
     firstStep = {dx: move.x*2, dy: move.y*2, dir: move};
   } else {
     // Second click
@@ -171,13 +151,12 @@ function handleStep(dir){
     // Check perpendicular short move
     const dot = firstStep.dir.x*move.x + firstStep.dir.y*move.y;
     if(dot === 0 && (Math.abs(move.x)+Math.abs(move.y)===1)){
-      // valid L-shape
       knightPos.x += firstStep.dx + move.x;
       knightPos.y += firstStep.dy + move.y;
       constrainPosition(knightPos);
       placeKnight();
     }
-    firstStep = null; // reset first step in any case
+    firstStep = null;
   }
 }
 
@@ -195,6 +174,47 @@ document.addEventListener('keydown', e=>{
 document.querySelectorAll('.osd-button').forEach(btn=>{
   btn.addEventListener('click', ()=> handleStep(btn.dataset.dir));
 });
+
+// --- Obstacles ---
+const pieceTypes = [
+  {type:'P', color:'blue', speed:0.05},
+  {type:'B', color:'purple', speed:0.03, diagonal:true},
+  {type:'R', color:'green', speed:0.08},
+  {type:'Q', color:'gold', speed:0.1}
+];
+
+function addObstacle(){
+  const piece = pieceTypes[Math.floor(Math.random()*pieceTypes.length)];
+  const obs = document.createElement('div');
+  obs.classList.add('obstacle');
+  obs.textContent = piece.type;
+  obs.style.background = piece.color;
+
+  let posX = Math.floor(Math.random()*8);
+  obs.style.left = `${posX*gridSize +12.5}px`;
+  obs.style.top = `-50px`;
+
+  container.appendChild(obs);
+  obstacles.push({el: obs, x: posX, y: -0.5, speed: piece.speed, diagonal: piece.diagonal || false, dirX: Math.random()<0.5?1:-1});
+}
+
+function moveObstacles(){
+  obstacles.forEach((o, index)=>{
+    if(o.diagonal){
+      o.x += o.dirX*0.02;
+      if(o.x<0) {o.x=0; o.dirX=1;}
+      if(o.x>7) {o.x=7; o.dirX=-1;}
+      o.el.style.left = `${o.x*gridSize + 12.5}px`;
+    }
+    o.y += o.speed;
+    o.el.style.top = `${o.y*gridSize}px`;
+
+    if(Math.floor(o.y) === knightPos.y && Math.floor(o.x) === knightPos.x){
+      gameOver();
+    }
+    if(o.y > 8){ o.el.remove(); obstacles.splice(index,1); score++; scoreDisplay.textContent=`Score:${score}`; }
+  });
+}
 
 // Intervals
 let moveInterval = setInterval(()=>{ moveObstacles(); }, 20);
