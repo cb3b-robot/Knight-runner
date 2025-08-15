@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Knight Runner — Fixed & Responsive</title>
+<title>Knight Runner — Clean Build</title>
 <style>
 :root{ --board:600px; --cell:calc(var(--board)/8); }
 *{box-sizing:border-box;}
@@ -51,7 +51,7 @@ button,input{font-size:16px}
   transition:left .18s cubic-bezier(.2,.7,.2,1), top .18s cubic-bezier(.2,.7,.2,1), filter .2s ease;
 }
 .knight.danger{filter:drop-shadow(0 0 10px #e74c3c)}
-.enemy{z-index:90;color:#000;font-size:calc(var(--cell)*0.66);filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));}
+.enemy{z-index:90;color:#111;font-size:calc(var(--cell)*0.66);filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));}
 
 /* Power-ups */
 .power{position:absolute;z-index:80;width:var(--cell);height:var(--cell);display:flex;align-items:center;justify-content:center;pointer-events:none;}
@@ -168,7 +168,7 @@ button,input{font-size:16px}
 
   const SIZE = 8;
   const CELL = () => parseFloat(getComputedStyle(root).getPropertyValue('--cell'));
-  const GLYPHS = { knight:'♘', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
+  const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; // knight uses filled glyph
 
   /* ===== Audio (SFX + Music) ===== */
   const MUTE_KEY = 'KR_mute';
@@ -241,15 +241,16 @@ button,input{font-size:16px}
       const o1=audio.ctx.createOscillator(), o2=audio.ctx.createOscillator(), g=audio.ctx.createGain();
       o1.type='sine'; o2.type='sine'; o1.frequency.value=freq; o2.frequency.value=freq*2**(7/1200);
       g.gain.setValueAtTime(0.0001,when); g.gain.linearRampToValueAtTime(gain,when+0.8); g.gain.linearRampToValueAtTime(0.0001,when+dur);
-      o1.connect(g); o2.connect(g); g.connect(padGain); o1.start(when); o2.start(when); o1.stop(when+dur+0.1); o2.stop(when+dur+0.1);
+      o1.connect(g); o2.connect(g); g.connect(padGain);
+      o1.start(when); o2.start(when); o1.stop(when+dur+0.1); o2.stop(when+dur+0.1);
     }
     const roots=[57,53,60,55]; const arpPattern=[0,7,12,7,0,7,12,14]; const stepDur=0.5;
     function tick(){
       if (!playing || !audio.enabled) return;
       const t=now(); const bar=Math.floor(step/4); const root=roots[Math.floor(bar%roots.length)];
-      if (step%4===0){ playPad({freq:mtof(root),when:t+0.01,dur:3.8}); playPad({freq:mtof(root+7),when:t+0.01,dur:3.8,gain:0.08}); }
+      if (step%4===0){ playPad({freq:mtof(root),when:t+0.01,dur=3.8}); playPad({freq:mtof(root+7),when:t+0.01,dur=3.8,gain:0.08}); }
       const intv=arpPattern[step%arpPattern.length];
-      playNote({freq:mtof(root+intv),when:t+0.02,dur:0.24,type:'triangle',gain:0.18});
+      playNote({freq:mtof(root+intv),when:t+0.02,dur=0.24,type='triangle',gain:0.18});
       step++;
     }
     function start(){ init(); if (playing) return; playing=true; tick(); timer=setInterval(()=>tick(), stepDur*1000); }
@@ -510,7 +511,7 @@ button,input{font-size:16px}
     e.btx=nx; e.bty=ny;
   }
 
-  /* ===== Difficulty / spawn ===== */
+  /* ===== Difficulty / spawn (single source of truth) ===== */
   const baseSpawnDelay=1500;
   function scheduleSpawn(){
     const next=Math.max(60, baseSpawnDelay / (speedMult*(slowFactor||1)));
@@ -619,6 +620,7 @@ button,input{font-size:16px}
   /* ===== Arrow key two-step ===== */
   const DIRS = { up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
   let arrowStep=0, firstArrow=null;
+  function clearGuide(){ while (guide.lastChild && guide.lastChild!==defs) guide.removeChild(guide.lastChild); }
   function processArrow(dir){
     if (arrowStep===0){ firstArrow=dir; arrowStep=1; drawFirstArrow(dir); return; }
     const dx2=firstArrow.x*2, dy2=firstArrow.y*2;
@@ -684,26 +686,7 @@ button,input{font-size:16px}
     SFX.restart(); Music.start();
   }
 
-  /* ===== Start ===== */
-  const baseSpawnDelay=1500;
-  function scheduleSpawn(){
-    const next=Math.max(60, baseSpawnDelay / (speedMult*(slowFactor||1)));
-    spawnTimer=setTimeout(function tick(){
-      if (!running) return;
-      if (Math.random()<0.12) spawnPowerUp(); else spawnEnemy();
-      scheduleSpawn();
-    }, next);
-  }
-  function scheduleDifficulty(){
-    difficultyTimer=setInterval(()=>{
-      if (!running) return;
-      speedMult += 0.4;
-      speedEl.textContent = `${(speedMult*(slowFactor||1)).toFixed(1)}×`;
-      clearTimeout(spawnTimer);
-      scheduleSpawn();
-    }, 6000);
-  }
-
+  /* ===== Kickoff ===== */
   updateDots(); scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
   applyMuteUI();
 })();
