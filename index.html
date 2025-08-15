@@ -3,12 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Knight Runner — Bishops 2×</title>
+<title>Knight Runner — Dots + Arrows Restored</title>
 <style>
 :root{--board:600px;--cell:75px;}
 *{box-sizing:border-box;}
-body{margin:0;background:#111;color:#fff;font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-     display:flex;flex-direction:column;align-items:center;gap:12px;}
+body{margin:0;background:#111;color:#fff;font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;display:flex;flex-direction:column;align-items:center;gap:12px;}
 h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
 .hud{display:flex;gap:14px;align-items:center;font-weight:600;text-shadow:0 1px 2px #0008;}
 .pill{padding:6px 10px;border-radius:999px;background:#222;border:1px solid #333;}
@@ -19,7 +18,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   box-shadow:0 12px 40px #0008,inset 0 0 0 1px #0006;
 }
 
-/* 8×8 board */
+/* Board */
 .square{position:absolute;width:var(--cell);height:var(--cell);}
 .light{background:#f0d9b5;}
 .dark{background:#b58863;}
@@ -39,10 +38,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   display:flex;align-items:center;justify-content:center;
   z-index:120;cursor:pointer;
 }
-.dot span{
-  width:18px;height:18px;border-radius:50%;
-  background:#2ecc71;box-shadow:0 0 0 3px #2ecc7144,0 2px 6px #0007;
-}
+.dot span{width:18px;height:18px;border-radius:50%;background:#2ecc71;box-shadow:0 0 0 3px #2ecc7144,0 2px 6px #0007;}
 .dot:active span{transform:scale(.92);}
 
 /* First-arrow highlight */
@@ -102,10 +98,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   knightEl.className = 'piece knight';
   knightEl.textContent = GLYPHS.knight;
   game.appendChild(knightEl);
-  const placeKnight = () => {
-    knightEl.style.left = `${knight.x*CELL}px`;
-    knightEl.style.top  = `${knight.y*CELL}px`;
-  };
+  const placeKnight = () => { knightEl.style.left = `${knight.x*CELL}px`; knightEl.style.top = `${knight.y*CELL}px`; };
   placeKnight();
 
   // First-arrow highlight
@@ -119,7 +112,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   };
   const hideArrowHighlight = () => { arrowHighlight.style.display='none'; };
 
-  // All knight moves visible
+  // Dots (all knight moves)
   const knightOffsets = [
     {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
     {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
@@ -148,14 +141,11 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   // Enemies (smooth, continuous)
   const BASE_SPEED = {           // cells per second (scaled by speedMult)
     pawn:   1.15,
-    bishop: 2.20,  // doubled speed
-    rook:   3.00,  // flies down
+    bishop: 2.20,  // 2× faster bishops
+    rook:   3.00,  // fast plunge
     queen:  1.35
   };
-  const LATERAL_SPEED = {        // cells/sec lateral
-    bishop: 0.95,
-    queen:  0.95
-  };
+  const LATERAL_SPEED = { bishop: 0.95, queen: 0.95 };
 
   let enemies = []; // {el, px, py, type, vxCells, vyCells, queenTurnMs}
 
@@ -174,21 +164,17 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     el.textContent = GLYPHS[type];
     game.appendChild(el);
 
-    // pixel positions
     const px = x*CELL;
     const py = y*CELL;
 
-    // base velocities in cells/sec
     let vxCells = 0, vyCells = BASE_SPEED[type];
     if (type === 'rook') { vxCells = 0; vyCells = BASE_SPEED.rook; }
-    if (type === 'bishop') {
-      vxCells = (Math.random()<0.5 ? -1 : 1) * LATERAL_SPEED.bishop;
-    }
+    if (type === 'bishop') { vxCells = (Math.random()<0.5 ? -1 : 1) * LATERAL_SPEED.bishop; }
     let queenTurnMs = 0;
     if (type === 'queen') {
       const choice = [-1,0,1][Math.floor(Math.random()*3)];
       vxCells = choice * LATERAL_SPEED.queen;
-      queenTurnMs = 250 + Math.random()*300;
+      queenTurnMs = 250 + Math.random()*300; // next change in 250–550ms
     }
 
     const e = { el, px, py, type, vxCells, vyCells, queenTurnMs };
@@ -201,13 +187,13 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   let startTime = performance.now();
   let lastTime = performance.now();
 
-  // Difficulty
+  // Difficulty ramp (infinite)
   let speedMult = 1.0;
   const baseSpawnDelay = 1500;
   let spawnTimer, difficultyTimer;
 
   function scheduleSpawn(){
-    const next = Math.max(60, baseSpawnDelay / speedMult);
+    const next = Math.max(60, baseSpawnDelay / speedMult); // tiny floor prevents zero/negative
     spawnTimer = setTimeout(function tick(){
       if (!running) return;
       spawnEnemy();
@@ -218,7 +204,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   function scheduleDifficulty(){
     difficultyTimer = setInterval(()=>{
       if (!running) return;
-      // 2× faster ramp, no cap
+      // 2× faster ramp; no cap
       speedMult += 0.4;
       speedEl.textContent = `${speedMult.toFixed(1)}×`;
       clearTimeout(spawnTimer);
@@ -235,11 +221,10 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
 
   function moveEnemiesSmooth(dt){
     const dtSec = dt / 1000;
-
     for (let i=enemies.length-1;i>=0;i--){
       const e = enemies[i];
 
-      // Queens: random lateral changes
+      // Queens: change lateral randomly every few hundred ms
       if (e.type === 'queen'){
         e.queenTurnMs -= dt;
         if (e.queenTurnMs <= 0){
@@ -249,32 +234,26 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
         }
       }
 
-      // Bishops bounce on walls
+      // Bishops bounce at walls
       if (e.type === 'bishop'){
         const nextPx = e.px + e.vxCells * CELL * speedMult * dtSec;
-        if (nextPx < 0 || nextPx > (SIZE-1)*CELL){
-          e.vxCells = -e.vxCells;
-        }
+        if (nextPx < 0 || nextPx > (SIZE-1)*CELL){ e.vxCells = -e.vxCells; }
       }
 
-      // Convert to px/sec with speed multiplier
+      // Convert cells/sec to px/sec via speed multiplier
       const vx = e.vxCells * CELL * speedMult;
       const vy = e.vyCells * CELL * speedMult;
 
       e.px = clampX(e.px + vx * dtSec);
       e.py += vy * dtSec;
 
-      // Paint
       e.el.style.left = `${e.px}px`;
       e.el.style.top  = `${e.py}px`;
 
-      // Collision (rounded cells)
+      // Collision check (rounded cell positions)
       const ex = Math.round(e.px / CELL);
       const ey = Math.round(e.py / CELL);
-      if (ex === knight.x && ey === knight.y){
-        gameOver();
-        return;
-      }
+      if (ex === knight.x && ey === knight.y){ gameOver(); return; }
 
       // Remove off-board
       if (e.py > SIZE*CELL){
@@ -309,9 +288,9 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     const dx2 = firstArrow.x * 2, dy2 = firstArrow.y * 2;
     let tx = knight.x, ty = knight.y;
 
-    if (firstArrow.x !== 0 && dir.y !== 0){ tx += dx2; ty += dir.y; }
-    else if (firstArrow.y !== 0 && dir.x !== 0){ tx += dir.x; ty += dy2; }
-    else if (firstArrow.x === -dir.x && firstArrow.y === -dir.y){ arrowStep=0; firstArrow=null; hideArrowHighlight(); return; }
+    if (firstArrow.x !== 0 && dir.y !== 0){ tx += dx2; ty += dir.y; }      // long horizontal, short vertical
+    else if (firstArrow.y !== 0 && dir.x !== 0){ tx += dir.x; ty += dy2; } // long vertical, short horizontal
+    else if (firstArrow.x === -dir.x && firstArrow.y === -dir.y){ arrowStep=0; firstArrow=null; hideArrowHighlight(); return; } // cancel
     else { arrowStep=0; firstArrow=null; hideArrowHighlight(); return; }
 
     if (tx<0||tx>=SIZE||ty<0||ty>=SIZE){ arrowStep=0; firstArrow=null; hideArrowHighlight(); return; }
