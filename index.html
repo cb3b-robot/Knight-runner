@@ -3,12 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Knight Runner — Mobile Friendly Fix</title>
+<title>Knight Runner — Fixed & Responsive</title>
 <style>
-:root{
-  --board: 600px;              /* JS will override for device */
-  --cell: calc(var(--board) / 8);
-}
+:root{ --board:600px; --cell:calc(var(--board)/8); }
 *{box-sizing:border-box;}
 html,body{height:100%;}
 body{
@@ -19,12 +16,7 @@ body{
   overflow:hidden;
 }
 h1{margin:6px 0 0;font-size:clamp(18px,3.8vw,28px);}
-
-.hud{
-  display:flex;gap:10px;align-items:center;justify-content:center;
-  flex-wrap:wrap;font-weight:600;text-shadow:0 1px 2px #0008;
-  padding:4px 0;
-}
+.hud{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;font-weight:600;text-shadow:0 1px 2px #0008;padding:4px 0;}
 .pill{padding:6px 10px;border-radius:999px;background:#222;border:1px solid #333;}
 #status{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .badge{padding:4px 8px;border-radius:999px;border:1px solid #444;background:#1c1c1c;font-size:12px;opacity:.9}
@@ -40,13 +32,7 @@ button,input{font-size:16px}
   transition:transform .12s ease;
 }
 #game.shake{animation:shake .35s ease;}
-@keyframes shake{
-  0%,100%{transform:translate3d(0,0,0)}
-  20%{transform:translate3d(-6px,0,0)}
-  40%{transform:translate3d(6px,0,0)}
-  60%{transform:translate3d(-4px,0,0)}
-  80%{transform:translate3d(4px,0,0)}
-}
+@keyframes shake{0%,100%{transform:translate3d(0,0,0)}20%{transform:translate3d(-6px,0,0)}40%{transform:translate3d(6px,0,0)}60%{transform:translate3d(-4px,0,0)}80%{transform:translate3d(4px,0,0)}}
 
 /* Board squares */
 .square{position:absolute;width:var(--cell);height:var(--cell);}
@@ -65,7 +51,7 @@ button,input{font-size:16px}
   transition:left .18s cubic-bezier(.2,.7,.2,1), top .18s cubic-bezier(.2,.7,.2,1), filter .2s ease;
 }
 .knight.danger{filter:drop-shadow(0 0 10px #e74c3c)}
-.enemy{z-index:90;color:#111;font-size:calc(var(--cell)*0.66);filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));}
+.enemy{z-index:90;color:#000;font-size:calc(var(--cell)*0.66);filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));}
 
 /* Power-ups */
 .power{position:absolute;z-index:80;width:var(--cell);height:var(--cell);display:flex;align-items:center;justify-content:center;pointer-events:none;}
@@ -182,7 +168,7 @@ button,input{font-size:16px}
 
   const SIZE = 8;
   const CELL = () => parseFloat(getComputedStyle(root).getPropertyValue('--cell'));
-  const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
+  const GLYPHS = { knight:'♘', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
 
   /* ===== Audio (SFX + Music) ===== */
   const MUTE_KEY = 'KR_mute';
@@ -409,7 +395,6 @@ button,input{font-size:16px}
   }
   const resizeObserver = new ResizeObserver(() => {
     guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
-    // reposition squares and knight to the new cell size
     const squares = document.querySelectorAll('.square');
     squares.forEach((sq, i) => {
       const x = i % SIZE, y = (i/ SIZE)|0;
@@ -700,6 +685,7 @@ button,input{font-size:16px}
   }
 
   /* ===== Start ===== */
+  const baseSpawnDelay=1500;
   function scheduleSpawn(){
     const next=Math.max(60, baseSpawnDelay / (speedMult*(slowFactor||1)));
     spawnTimer=setTimeout(function tick(){
@@ -708,7 +694,6 @@ button,input{font-size:16px}
       scheduleSpawn();
     }, next);
   }
-  const baseSpawnDelay=1500;
   function scheduleDifficulty(){
     difficultyTimer=setInterval(()=>{
       if (!running) return;
@@ -721,7 +706,6 @@ button,input{font-size:16px}
 
   updateDots(); scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
   applyMuteUI();
-
 })();
 </script>
 </body>
