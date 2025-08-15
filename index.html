@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Knight Runner — Rooks & Queens</title>
+<title>Knight Runner — Arrow Highlight</title>
 <style>
 :root{--board:600px;--cell:75px;}
 *{box-sizing:border-box;}
@@ -17,10 +17,11 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
 .dark{background:#b58863;}
 .piece{position:absolute;width:var(--cell);height:var(--cell);display:flex;align-items:center;justify-content:center;pointer-events:none;user-select:none;}
 .knight{z-index:110;color:#fff;font-size:52px;text-shadow:0 2px 6px #0009;}
-.enemy{z-index:90;color:#111;font-size:50px;filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));transition:left 0.3s linear, top 0.3s linear;}
+.enemy{z-index:90;color:#111;font-size:50px;filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));}
 .dot{position:absolute;width:var(--cell);height:var(--cell);display:flex;align-items:center;justify-content:center;z-index:120;cursor:pointer;}
 .dot span{width:18px;height:18px;border-radius:50%;background:#2ecc71;box-shadow:0 0 0 3px #2ecc7144,0 2px 6px #0007;}
 .dot:active span{transform:scale(.92);}
+#arrowHighlight{position:absolute;width:var(--cell);height:var(--cell);border:2px solid #2ecc71;border-radius:8px;pointer-events:none;transition:all 0.15s ease;z-index:130;display:none;}
 #pad{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(3,64px);gap:8px;margin:2px 0 18px;}
 .pad-btn{display:flex;align-items:center;justify-content:center;background:#fff;color:#111;border-radius:10px;border:1px solid #ddd;font-weight:800;font-size:22px;cursor:pointer;box-shadow:0 4px 18px #0005,inset 0 -2px 0 #0001;user-select:none;}
 .pad-btn:active{transform:translateY(1px);}
@@ -80,6 +81,17 @@ const knightEl = document.createElement('div'); knightEl.className='piece knight
 game.appendChild(knightEl);
 function placeKnight(){ knightEl.style.left=`${knight.x*CELL}px`; knightEl.style.top=`${knight.y*CELL}px`; }
 
+// --- Arrow Highlight ---
+const arrowHighlight = document.createElement('div');
+arrowHighlight.id = 'arrowHighlight';
+game.appendChild(arrowHighlight);
+function showArrowHighlight(dir){
+  arrowHighlight.style.display = 'block';
+  arrowHighlight.style.left = `${knight.x*CELL + dir.x*CELL}px`;
+  arrowHighlight.style.top = `${knight.y*CELL + dir.y*CELL}px`;
+}
+function hideArrowHighlight(){ arrowHighlight.style.display='none'; }
+
 // --- Knight moves ---
 const knightOffsets=[{x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},{x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}];
 function updateDots(){ dots.forEach(d=>d.remove()); dots=[]; if(!running) return;
@@ -96,39 +108,42 @@ function spawnEnemy(){ const r=Math.random(), types=['pawn','rook','bishop','que
 if(r>0.85) type='queen'; else if(r>0.65) type='rook'; else if(r>0.4) type='bishop';
 const x=Math.floor(Math.random()*SIZE), y=-1; const el=document.createElement('div'); el.className='piece enemy';
 el.textContent=GLYPHS[type]; game.appendChild(el); 
-let dx=0, dy=1, extra={}; 
+let dx=0, dy=1; 
 if(type==='bishop'){ dx=Math.random()<0.5?-1:1; dy=1; } 
-if(type==='queen'){ extra.diagChance=0.5; extra.doubleChance=0.33; }
-enemies.push({el,x,y,type,dx,dy,extra}); placeEnemy(enemies[enemies.length-1]); }
+enemies.push({el,x,y,type,dx,dy}); placeEnemy(enemies[enemies.length-1]); }
 
-function placeEnemy(e){ e.el.style.left=`${e.x*CELL}px`; e.el.style.top=`${e.y*CELL}px`; }
+function placeEnemy(e){
+  const prevX = parseFloat(e.el.style.left) || 0;
+  const prevY = parseFloat(e.el.style.top) || 0;
+  const dx = Math.abs(e.x*CELL - prevX);
+  const dy = Math.abs(e.y*CELL - prevY);
+  const duration = Math.max(dx, dy) / CELL * 0.3;
+  e.el.style.transition = `left ${duration}s linear, top ${duration}s linear`;
+  e.el.style.left = `${e.x*CELL}px`;
+  e.el.style.top = `${e.y*CELL}px`;
+}
 
 function moveEnemies(){
   for(let i=enemies.length-1;i>=0;i--){
     const e=enemies[i];
-    let moves = 1;
-    if(e.type==='queen') moves = 1; // still one step per tick but will vary dx
-
-    for(let m=0;m<moves;m++){
-      if(e.type==='rook'){ e.dx=0; e.dy=2; } // rooks fly down faster
-      if(e.type==='queen'){ // unpredictable moves
-        const r=Math.random();
-        if(r<0.33){ e.dx=-1; e.dy=1; }       // forward-left
-        else if(r<0.66){ e.dx=0; e.dy=1; }   // straight
-        else{ e.dx=1; e.dy=1; }               // forward-right
-      }
-      if(e.type==='bishop'){ if(e.x<=0) e.dx=1; if(e.x>=SIZE-1) e.dx=-1; e.dy=1; }
-
-      e.x += e.dx;
-      e.y += e.dy;
-
-      if(e.x<0) e.x=0;
-      if(e.x>SIZE-1) e.x=SIZE-1;
-
-      placeEnemy(e);
-      if(Math.round(e.x)===knight.x && Math.round(e.y)===knight.y) gameOver();
-      if(e.y>SIZE){ e.el.remove(); enemies.splice(i,1); break; }
+    if(e.type==='rook'){ e.dx=0; e.dy=2; }
+    if(e.type==='queen'){
+      const r=Math.random();
+      if(r<0.33){ e.dx=-1; e.dy=1; }
+      else if(r<0.66){ e.dx=0; e.dy=1; }
+      else{ e.dx=1; e.dy=1; }
     }
+    if(e.type==='bishop'){ if(e.x<=0) e.dx=1; if(e.x>=SIZE-1) e.dx=-1; e.dy=1; }
+
+    e.x += e.dx;
+    e.y += e.dy;
+
+    if(e.x<0) e.x=0;
+    if(e.x>SIZE-1) e.x=SIZE-1;
+
+    placeEnemy(e);
+    if(Math.round(e.x)===knight.x && Math.round(e.y)===knight.y) gameOver();
+    if(e.y>SIZE){ e.el.remove(); enemies.splice(i,1); }
   }
 }
 
@@ -163,14 +178,14 @@ clearTimeout(enemyMoveTimer); clearTimeout(spawnTimer); scheduleEnemyMove(); sch
 // --- Arrow key knight logic ---
 const DIRS={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
 function processArrow(dir){
-  if(arrowStep===0){ firstArrow=dir; arrowStep=1; return; }
+  if(arrowStep===0){ firstArrow=dir; arrowStep=1; showArrowHighlight(dir); return; }
   const dx=firstArrow.x*2, dy=firstArrow.y*2; let tx=knight.x, ty=knight.y;
   if(firstArrow.x!==0 && dir.y!==0){ tx+=dx; ty+=dir.y; }
   else if(firstArrow.y!==0 && dir.x!==0){ tx+=dir.x; ty+=dy; }
-  else if(firstArrow.x=== -dir.x && firstArrow.y=== -dir.y){ arrowStep=0; firstArrow=null; return; }
-  else{ arrowStep=0; firstArrow=null; return; }
-  if(tx<0||tx>=SIZE||ty<0||ty>=SIZE){ arrowStep=0; firstArrow=null; return; }
-  knight.x=tx; knight.y=ty; placeKnight(); checkCollision(); updateDots(); arrowStep=0; firstArrow=null;
+  else if(firstArrow.x=== -dir.x && firstArrow.y=== -dir.y){ arrowStep=0; firstArrow=null; hideArrowHighlight(); return; }
+  else{ arrowStep=0; firstArrow=null; hideArrowHighlight(); return; }
+  if(tx<0||tx>=SIZE||ty<0||ty>=SIZE){ arrowStep=0; firstArrow=null; hideArrowHighlight(); return; }
+  knight.x=tx; knight.y=ty; placeKnight(); checkCollision(); updateDots(); arrowStep=0; firstArrow=null; hideArrowHighlight();
 }
 document.addEventListener('keydown',e=>{ if(!running) return; const dir=DIRS[e.key.replace('Arrow','').toLowerCase()]; if(!dir) return; processArrow(dir); });
 document.querySelectorAll('.pad-btn[data-dir]').forEach(btn=>{ btn.addEventListener('click',()=>{ if(!running) return; const dir=DIRS[btn.dataset.dir]; if(!dir) return; processArrow(dir); }); });
