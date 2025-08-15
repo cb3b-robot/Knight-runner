@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Knight Runner — Stable Build</title>
+<title>Knight Runner — KR-2025-08-15-b</title>
 <style>
 :root{ --board:600px; --cell:calc(var(--board)/8); }
 *{box-sizing:border-box;}
@@ -34,7 +34,7 @@ button,input{font-size:16px}
 #game.shake{animation:shake .35s ease;}
 @keyframes shake{0%,100%{transform:translate3d(0,0,0)}20%{transform:translate3d(-6px,0,0)}40%{transform:translate3d(6px,0,0)}60%{transform:translate3d(-4px,0,0)}80%{transform:translate3d(4px,0,0)}}
 
-/* Board */
+/* Board squares */
 .square{position:absolute;width:var(--cell);height:var(--cell);}
 .light{background:#f0d9b5;}
 .dark{background:#b58863;}
@@ -105,6 +105,10 @@ button,input{font-size:16px}
 /* Sparkle */
 .sparkle{position:absolute;pointer-events:none;z-index:150;width:8px;height:8px;border-radius:50%;background:#fff;opacity:.9;animation:spark .5s ease-out forwards;}
 @keyframes spark{to{transform:translateY(-12px) scale(.2);opacity:0}}
+
+/* Error overlay */
+#errorOverlay{position:fixed;inset:0;background:#1b1b1bcc;color:#fff;z-index:9999;display:none;align-items:flex-start;justify-content:center;padding:16px;overflow:auto}
+#errorOverlay pre{max-width:900px;width:100%;background:#2a2a2a;border:1px solid #ff6b6b;border-radius:10px;padding:12px;white-space:pre-wrap;word-break:break-word}
 </style>
 </head>
 <body>
@@ -133,6 +137,28 @@ button,input{font-size:16px}
   <ol id="lbList"></ol>
 </div>
 
+<!-- Error overlay (always loads first so it can catch errors) -->
+<div id="errorOverlay"><pre id="errorText"></pre></div>
+<script>
+(function(){
+  // Show any runtime/parse errors so we don't get a blank board.
+  const overlay = document.getElementById('errorOverlay');
+  const text = document.getElementById('errorText');
+  function show(msg){
+    overlay.style.display='flex';
+    text.textContent = 'JavaScript error:\n\n' + msg + '\n\n(Hard refresh after fixing)';
+  }
+  window.addEventListener('error', (e)=>{
+    // Syntax and runtime errors in subsequent scripts will land here.
+    const where = (e.filename ? ('\\n' + e.filename) : '') + (e.lineno? (':' + e.lineno) : '');
+    show((e.message||'Unknown error') + where);
+  });
+  window.addEventListener('unhandledrejection', (e)=>{
+    show('Unhandled promise rejection: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)));
+  });
+})();
+</script>
+
 <script>
 (() => {
   /* ===== Responsive board ===== */
@@ -154,16 +180,16 @@ button,input{font-size:16px}
   window.addEventListener('orientationchange', () => setTimeout(setBoardSize, 120), {passive:true});
   setBoardSize(); setTimeout(setBoardSize, 200); setTimeout(setBoardSize, 800);
 
-  /* ===== Helpers & constants ===== */
+  /* ===== HUD refs ===== */
   const scoreEl = document.getElementById('score');
   const speedEl = document.getElementById('speed');
   const lbList  = document.getElementById('lbList');
   const muteBtn = document.getElementById('muteBtn');
-
   const bShield = document.getElementById('bShield');
   const bSpeed  = document.getElementById('bSpeed');
   const bSlow   = document.getElementById('bSlow');
 
+  /* ===== Constants ===== */
   const SIZE = 8;
   const CELL = () => parseFloat(getComputedStyle(root).getPropertyValue('--cell'));
   const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
@@ -246,9 +272,9 @@ button,input{font-size:16px}
     function tick(){
       if (!playing || !audio.enabled) return;
       const t=now(); const bar=Math.floor(step/4); const root=roots[Math.floor(bar%roots.length)];
-      if (step%4===0){ playPad({freq:mtof(root),when:t+0.01,dur=3.8}); playPad({freq:mtof(root+7),when:t+0.01,dur=3.8,gain:0.08}); }
+      if (step%4===0){ playPad({freq:mtof(root),when:t+0.01,dur=3.8}); playPad({freq:mtof(root+7),when:t+0.01,dur=3.8,gain=0.08}); }
       const intv=arpPattern[step%arpPattern.length];
-      playNote({freq:mtof(root+intv),when:t+0.02,dur=0.24,type:'triangle',gain:0.18});
+      playNote({freq:mtof(root+intv),when:t+0.02,dur=0.24,type:'triangle',gain=0.18});
       step++;
     }
     function start(){ init(); if (playing) return; playing=true; tick(); timer=setInterval(()=>tick(), stepDur*1000); }
@@ -304,12 +330,12 @@ button,input{font-size:16px}
     }
   });
 
-  /* ===== Game state (single source of truth) ===== */
+  /* ===== Game state ===== */
   let running = true;
   let speedMult = 1.0;
   let slowFactor = 1.0;
-  let enemies = [];     // <— declared once here
-  let powerups = [];    // <— declared once here
+  let enemies = [];
+  let powerups = [];
   let shield = 0;
   let speedMoves = 0;
   let slowUntil = 0;
@@ -318,7 +344,7 @@ button,input{font-size:16px}
   let startTime = performance.now();
   let lastTime  = startTime;
 
-  /* ===== Board ===== */
+  /* ===== Build board ===== */
   for (let y=0;y<SIZE;y++){
     for (let x=0;x<SIZE;x++){
       const sq = document.createElement('div');
@@ -464,6 +490,7 @@ button,input{font-size:16px}
 
   /* ===== Enemies ===== */
   const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 }; // cells/sec
+  let enemies = [];
   function spawnEnemy(){
     const r=Math.random();
     let type = (r>0.85)?'queen' : (r>0.65)?'rook' : (r>0.40)?'bishop' : 'pawn';
@@ -497,7 +524,7 @@ button,input{font-size:16px}
     e.btx=nx; e.bty=ny;
   }
 
-  /* ===== Difficulty & spawn ===== */
+  /* ===== Difficulty / spawn ===== */
   const baseSpawnDelay=1500;
   function scheduleSpawn(){
     const next=Math.max(60, baseSpawnDelay / (speedMult*(slowFactor||1)));
@@ -538,7 +565,7 @@ button,input{font-size:16px}
       const e=enemies[i];
       if (e.type==='queen'){
         const speedPx=e.stepSpeed*CELL()*mult;
-        const dx=e.qtpX-e.px, dy=e.qtpY-e.py;         // ✅ correct dy
+        const dx=e.qtpX-e.px, dy=e.qtpY-e.py;     // correct dy
         const dist=Math.hypot(dx,dy); const step=speedPx*dtSec;
         if (dist<=step || dist===0){
           e.px=e.qtpX; e.py=e.qtpY; e.el.style.left=`${e.px}px`; e.el.style.top=`${e.py}px`;
