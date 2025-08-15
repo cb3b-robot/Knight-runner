@@ -8,7 +8,7 @@
   body {
     margin: 0;
     font-family: 'Arial', sans-serif;
-    background: linear-gradient(to bottom, #1e1e2f, #3b3b5f);
+    background: #222;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -28,16 +28,20 @@
     height: 600px;
     border: 4px solid #fff;
     border-radius: 10px;
-    background: repeating-linear-gradient(
-      0deg,
-      #3b3b5f,
-      #3b3b5f 50px,
-      #2e2e4a 50px,
-      #2e2e4a 100px
-    );
+    background-color: #fff;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
     overflow: hidden;
   }
 
+  /* Chessboard squares */
+  #game-container div.square {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Knight */
   .knight {
     width: 50px;
     height: 50px;
@@ -46,6 +50,7 @@
     transition: top 0.2s, left 0.2s;
   }
 
+  /* Obstacles */
   .obstacle {
     width: 50px;
     height: 50px;
@@ -53,6 +58,7 @@
     background: url('https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_pdt45.svg') no-repeat center/contain;
   }
 
+  /* On-screen controls */
   #osd-controls {
     margin-top: 10px;
     display: flex;
@@ -102,10 +108,7 @@
 </head>
 <body>
 <h1>Knight Runner</h1>
-<div id="game-container">
-  <div class="knight" id="knight"></div>
-  <div id="game-over">Game Over!</div>
-</div>
+<div id="game-container"></div>
 <div id="score">Score: 0</div>
 <div id="osd-controls">
   <div class="osd-button" data-dir="up-left">UL</div>
@@ -120,17 +123,21 @@
 
 <script>
 const gameContainer = document.getElementById('game-container');
-const knight = document.getElementById('knight');
-const gameOverText = document.getElementById('game-over');
 const scoreDisplay = document.getElementById('score');
+const knight = document.createElement('div');
+knight.classList.add('knight');
+gameContainer.appendChild(knight);
 
-const gridSize = 50; // Each cell is 50px
-const containerSize = 600;
-let knightPos = { x: 5, y: 5 }; // starting at center (grid 12x12)
+const gameOverText = document.createElement('div');
+gameOverText.id = 'game-over';
+gameOverText.textContent = 'Game Over!';
+gameContainer.appendChild(gameOverText);
+
+const gridSize = 75; // Chessboard 8x8 in 600px container
+let knightPos = { x: 4, y: 4 }; // center
 let score = 0;
 let obstacles = [];
-let gameInterval;
-let moveSequence = []; // stores two-step move sequence
+
 const knightMoves = {
   "up-left": [{x:-2,y:-1},{x:-1,y:-2}],
   "up-right": [{x:2,y:-1},{x:1,y:-2}],
@@ -142,6 +149,16 @@ const knightMoves = {
   "left-up": [{x:-1,y:-2},{x:-2,y:-1}]
 };
 
+// Create chessboard squares
+for(let y=0;y<8;y++){
+  for(let x=0;x<8;x++){
+    const square = document.createElement('div');
+    square.classList.add('square');
+    square.style.backgroundColor = (x+y)%2===0 ? '#f0d9b5' : '#b58863'; // light/dark
+    gameContainer.appendChild(square);
+  }
+}
+
 function placeKnight() {
   knight.style.left = `${knightPos.x * gridSize}px`;
   knight.style.top = `${knightPos.y * gridSize}px`;
@@ -151,10 +168,9 @@ function addObstacle() {
   const obstacle = document.createElement('div');
   obstacle.classList.add('obstacle');
 
-  // Random grid position not on knight
   let pos;
   do {
-    pos = {x: Math.floor(Math.random()*12), y: Math.floor(Math.random()*12)};
+    pos = {x: Math.floor(Math.random()*8), y: Math.floor(Math.random()*8)};
   } while ((pos.x === knightPos.x && pos.y === knightPos.y) || obstacles.some(o=>o.x===pos.x && o.y===pos.y));
 
   obstacle.style.left = `${pos.x * gridSize}px`;
@@ -177,14 +193,12 @@ function moveKnight(direction) {
   const moves = knightMoves[direction];
   if (!moves) return;
 
-  // Perform first move
   knightPos.x += moves[0].x;
   knightPos.y += moves[0].y;
   constrainPosition();
   placeKnight();
 
   setTimeout(() => {
-    // Second move
     knightPos.x += moves[1].x;
     knightPos.y += moves[1].y;
     constrainPosition();
@@ -195,19 +209,19 @@ function moveKnight(direction) {
       score++;
       scoreDisplay.textContent = `Score: ${score}`;
     }
-  }, 100); // short delay between moves for effect
+  }, 100);
 }
 
 function constrainPosition() {
-  if (knightPos.x < 0) knightPos.x = 0;
-  if (knightPos.y < 0) knightPos.y = 0;
-  if (knightPos.x > 11) knightPos.x = 11;
-  if (knightPos.y > 11) knightPos.y = 11;
+  if(knightPos.x<0) knightPos.x=0;
+  if(knightPos.y<0) knightPos.y=0;
+  if(knightPos.x>7) knightPos.x=7;
+  if(knightPos.y>7) knightPos.y=7;
 }
 
 // Keyboard controls
 document.addEventListener('keydown', e => {
-  switch(e.key) {
+  switch(e.key){
     case "ArrowUp": moveKnight("up-left"); break;
     case "ArrowDown": moveKnight("down-right"); break;
     case "ArrowLeft": moveKnight("left-up"); break;
@@ -215,18 +229,17 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// On-screen controls
-document.querySelectorAll('.osd-button').forEach(btn => {
-  btn.addEventListener('click', () => moveKnight(btn.dataset.dir));
+// On-screen buttons
+document.querySelectorAll('.osd-button').forEach(btn=>{
+  btn.addEventListener('click', ()=>moveKnight(btn.dataset.dir));
 });
 
-// Spawn obstacles every 2 seconds
-gameInterval = setInterval(() => {
+// Obstacles every 2s
+let gameInterval = setInterval(()=>{
   addObstacle();
-  if (checkCollision()) gameOver();
-}, 2000);
+  if(checkCollision()) gameOver();
+},2000);
 
-// Initial placement
 placeKnight();
 </script>
 </body>
