@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Knight Runner — Aligned Bishops</title>
+<title>Knight Runner — Local Leaderboard</title>
 <style>
 :root{--board:600px;--cell:75px;}
 *{box-sizing:border-box;}
@@ -45,6 +45,30 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
 #over h2{margin:0 0 8px;font-size:36px;}
 #over p{margin:0 0 12px;opacity:.9;}
 #restart{padding:10px 14px;border-radius:10px;border:1px solid #fff4;background:#fff;color:#111;cursor:pointer;font-weight:700;}
+#saveRow{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px;}
+#playerName{padding:8px 10px;border-radius:8px;border:1px solid #444;background:#222;color:#fff;min-width:180px;}
+#saveBtn{padding:8px 12px;border-radius:8px;border:1px solid #2ecc71;background:#2ecc71;color:#111;font-weight:700;cursor:pointer;}
+#saveBtn[disabled]{opacity:.6;cursor:not-allowed}
+
+/* Leaderboard panel (local) */
+#leaderboard{
+  width:var(--board);max-width:95vw;background:#1a1a1a;
+  border:1px solid #2a2a2a;border-radius:12px;
+  box-shadow:0 8px 24px #0007;overflow:hidden;margin:10px 0 16px;
+}
+#leaderboard header{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 12px;background:#222;border-bottom:1px solid #2f2f2f;
+}
+#leaderboard h3{margin:0;font-size:16px;letter-spacing:.4px;}
+#lbStatus{opacity:.8;font-size:12px;}
+#leaderboard ol{
+  list-style:none;margin:0;padding:10px 12px;
+  display:grid;grid-template-columns:1fr auto;row-gap:6px;
+}
+#leaderboard li{display:contents;}
+#leaderboard .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px;}
+#leaderboard .score{font-variant-numeric:tabular-nums;}
 
 @media (max-width:700px){
   :root{--board:86vw;--cell:calc(var(--board)/8);}
@@ -61,24 +85,73 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
 </div>
 <div id="game"></div>
 
+<!-- Local Leaderboard -->
+<div id="leaderboard">
+  <header>
+    <h3>Leaderboard (Top 10 – this browser)</h3>
+    <div id="lbStatus">saved locally</div>
+  </header>
+  <ol id="lbList"></ol>
+</div>
+
 <script>
 (() => {
   const game = document.getElementById('game');
   const scoreEl = document.getElementById('score');
   const speedEl = document.getElementById('speed');
+  const lbList = document.getElementById('lbList');
 
   const CELL = 75, SIZE = 8;
   const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
 
-  /* Runtime state (declare early) */
+  /* ---------- Local Leaderboard (no backend) ---------- */
+  const LS_KEY = 'knightRunnerTopScores_v1';
+  function loadScores(){
+    try { const raw = localStorage.getItem(LS_KEY); const arr = raw ? JSON.parse(raw) : []; return Array.isArray(arr)?arr:[]; }
+    catch { return []; }
+  }
+  function saveScores(arr){ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }
+  function addScore(name, score){
+    const list = loadScores();
+    list.push({ name: (name||'Player').trim(), score:+score, ts: Date.now() });
+    list.sort((a,b)=> b.score - a.score || a.ts - b.ts);
+    const top10 = list.slice(0,10);
+    saveScores(top10);
+    return top10;
+  }
+  function renderLeaderboard(myName=null, myScore=null){
+    lbList.innerHTML='';
+    const list = loadScores();
+    if(list.length===0){
+      const li = document.createElement('li');
+      const a = document.createElement('div'); a.className='name'; a.textContent='No scores yet';
+      const b = document.createElement('div'); b.className='score'; b.textContent='—';
+      lbList.appendChild(li); lbList.appendChild(a); lbList.appendChild(b);
+      return;
+    }
+    list.forEach((e,i)=>{
+      const li = document.createElement('li');
+      const name = document.createElement('div'); name.className='name';
+      const score = document.createElement('div'); score.className='score';
+      name.textContent = `${i+1}. ${e.name}`;
+      score.textContent = `${e.score.toFixed(1)}s`;
+      if(myName && myScore!=null && e.name===myName && Math.abs(e.score-myScore)<1e-6){
+        name.style.color = '#2ecc71'; score.style.color = '#2ecc71';
+      }
+      lbList.appendChild(li); lbList.appendChild(name); lbList.appendChild(score);
+    });
+  }
+  renderLeaderboard();
+
+  /* ---------- Runtime state (declare early) ---------- */
   let running = true;
   let speedMult = 1.0;
-  let enemies = [];                 // generic: {el, px, py, type, ...}
+  let enemies = [];                 // {el, px, py, type, ...}
   let spawnTimer, difficultyTimer;
   let startTime = performance.now();
   let lastTime  = startTime;
 
-  /* Board */
+  /* ---------- Board ---------- */
   for (let y=0;y<SIZE;y++){
     for (let x=0;x<SIZE;x++){
       const sq = document.createElement('div');
@@ -89,7 +162,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     }
   }
 
-  /* Knight */
+  /* ---------- Knight ---------- */
   let knight = { x:3, y:6 };
   const knightEl = document.createElement('div');
   knightEl.className = 'piece knight';
@@ -112,7 +185,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   };
   const hideArrowHighlight = () => { arrowHighlight.style.display='none'; };
 
-  /* Knight move dots */
+  /* ---------- Knight move dots ---------- */
   const knightOffsets = [
     {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
     {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
@@ -137,8 +210,8 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     }
   }
 
-  /* Enemies: base speeds (cells/sec, scaled by speedMult) */
-  const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 };
+  /* ---------- Enemy behavior ---------- */
+  const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 }; // cells/sec
 
   function spawnEnemy(){
     const r = Math.random();
@@ -153,14 +226,13 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     const px = x*CELL, py = y*CELL;
 
     if (type === 'queen') {
-      // Discrete stepper: choose one of three squares in front each row
+      // Queens: step exactly to one of three squares in front (forward-left, forward, forward-right)
       const e = {
-        el, type,
-        px, py,
-        qx: x, qy: y,            // current cell indices (queen starts at row -1)
+        el, type, px, py,
+        qx: x, qy: y,            // current cell indices (start row -1)
         qtx: x, qty: 0,          // next target cell
-        qtpX: x*CELL, qtpY: 0,   // target pixel
-        stepSpeed: BASE_SPEED.queen // cells/sec along straight segment
+        qtpX: x*CELL, qtpY: 0,   // next target pixel
+        stepSpeed: BASE_SPEED.queen
       };
       pickNextQueenTarget(e);
       e.qtpX = e.qtx * CELL; e.qtpY = e.qty * CELL;
@@ -170,18 +242,16 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     }
 
     if (type === 'bishop') {
-      // Diagonal stepper: always move to the next diagonal cell (x±1,y+1)
+      // Bishops: perfect diagonal stepper (x±1,y+1), bounce at walls; 2× speed
       const dirX = (Math.random()<0.5) ? -1 : 1;
       const e = {
-        el, type,
-        px, py,
-        bx: x, by: y,            // current cell indices (bishop starts at row -1)
-        bdir: dirX,              // -1 or +1
-        btx: x + dirX, bty: 0,   // next target cell (row 0 first)
-        btpX: (x + dirX) * CELL, btpY: 0, // target pixel
+        el, type, px, py,
+        bx: x, by: y,
+        bdir: dirX,
+        btx: x + dirX, bty: 0,
+        btpX: (x + dirX) * CELL, btpY: 0,
         stepSpeed: BASE_SPEED.bishop
       };
-      // clamp initial if spawning at an edge
       if (e.btx < 0 || e.btx >= SIZE) {
         e.bdir = -e.bdir;
         e.btx = e.bx + e.bdir;
@@ -192,19 +262,16 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
       return;
     }
 
-    // Pawns / Rooks continuous
+    // Pawns / Rooks: continuous downward velocity
     let vxCells = 0, vyCells = BASE_SPEED[type];
     if (type === 'rook') { vxCells = 0; vyCells = BASE_SPEED.rook; }
-
     const e = { el, type, px, py, vxCells, vyCells };
     el.style.left = `${px}px`; el.style.top = `${py}px`;
     enemies.push(e);
   }
 
   function pickNextQueenTarget(e){
-    // choose from x-1,x,x+1 at next row
-    const cx = e.qx, cy = e.qy;
-    const ny = cy + 1;
+    const cx = e.qx, cy = e.qy, ny = cy + 1;
     const options = [];
     for (const dx of [-1,0,1]) {
       const nx = cx + dx;
@@ -213,20 +280,15 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     const nx = options[Math.floor(Math.random()*options.length)] ?? cx;
     e.qtx = nx; e.qty = ny;
   }
-
   function pickNextBishopTarget(e){
-    // next diagonal cell (may bounce at side walls)
     const cx = e.bx, cy = e.by;
     let nx = cx + e.bdir;
     const ny = cy + 1;
-    if (nx < 0 || nx >= SIZE) {
-      e.bdir = -e.bdir;
-      nx = cx + e.bdir;
-    }
+    if (nx < 0 || nx >= SIZE) { e.bdir = -e.bdir; nx = cx + e.bdir; }
     e.btx = nx; e.bty = ny;
   }
 
-  /* Difficulty / spawn */
+  /* ---------- Difficulty / spawn ---------- */
   const baseSpawnDelay = 1500;
   function scheduleSpawn(){
     const next = Math.max(60, baseSpawnDelay / speedMult);
@@ -239,15 +301,14 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
   function scheduleDifficulty(){
     difficultyTimer = setInterval(()=>{
       if (!running) return;
-      // 2× ramp, no cap
-      speedMult += 0.4;
+      speedMult += 0.4; // 2× faster ramp, no cap
       speedEl.textContent = `${speedMult.toFixed(1)}×`;
       clearTimeout(spawnTimer);
       scheduleSpawn();
     }, 6000);
   }
 
-  /* Movement / collisions */
+  /* ---------- Movement & collisions ---------- */
   function clampX(px){
     if (px < 0) return 0;
     const max = (SIZE-1)*CELL;
@@ -262,10 +323,9 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
       const e = enemies[i];
 
       if (e.type === 'queen') {
-        // Move toward (qtpX,qtpY)
+        // Tween toward next selected cell
         const speedPx = e.stepSpeed * CELL * speedMult;
-        const dx = e.qtpX - e.px;
-        const dy = e.qtpY - e.py;
+        const dx = e.qtpX - e.px, dy = e.qtpY - e.py;
         const dist = Math.hypot(dx, dy);
         const step = speedPx * dtSec;
 
@@ -283,10 +343,9 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
         }
 
       } else if (e.type === 'bishop') {
-        // Move toward (btpX,btpY) along perfect diagonal (center-to-center)
+        // Perfect diagonal step tween
         const speedPx = e.stepSpeed * CELL * speedMult;
-        const dx = e.btpX - e.px;
-        const dy = e.btpY - e.py;
+        const dx = e.btpX - e.px, dy = e.btpY - e.py;
         const dist = Math.hypot(dx, dy);
         const step = speedPx * dtSec;
 
@@ -304,7 +363,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
         }
 
       } else {
-        // Pawns / Rooks (continuous)
+        // Pawns/Rooks continuous
         const vx = (e.vxCells||0) * CELL * speedMult;
         const vy = (e.vyCells||0) * CELL * speedMult;
         e.px = clampX(e.px + vx * dtSec);
@@ -313,7 +372,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
         e.el.style.top  = `${e.py}px`;
       }
 
-      // Collision (rounded cells)
+      // Collision (rounded to cells)
       const ex = Math.round(e.px / CELL);
       const ey = Math.round(e.py / CELL);
       if (ex === knight.x && ey === knight.y){ gameOver(); return; }
@@ -340,7 +399,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     requestAnimationFrame(loop);
   }
 
-  /* Keyboard: true knight two-step */
+  /* ---------- Keyboard: true knight two-step ---------- */
   const DIRS = { up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
   let arrowStep = 0, firstArrow = null;
 
@@ -368,23 +427,46 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     processArrow(dir);
   });
 
-  /* Game over / restart */
+  /* ---------- Game over / restart (integrated with leaderboard) ---------- */
   function gameOver(){
     if (!running) return;
     running = false;
     clearTimeout(spawnTimer);
     clearInterval(difficultyTimer);
-    dots.forEach(d=>d.remove()); dots = [];
+    if (dots && dots.length) { dots.forEach(d=>d.remove()); dots = []; }
     hideArrowHighlight();
 
     const over = document.createElement('div');
     over.id='over';
-    over.innerHTML = `<h2>Game Over</h2>
-      <p>You survived <strong>${scoreEl.textContent}s</strong></p>
-      <button id="restart">Play Again</button>`;
+    const finalScore = parseFloat(scoreEl.textContent) || 0;
+    over.innerHTML = `
+      <h2>Game Over</h2>
+      <p>You survived <strong>${finalScore.toFixed(1)}s</strong></p>
+      <div id="saveRow">
+        <input id="playerName" maxlength="16" placeholder="Your name">
+        <button id="saveBtn">Save Score</button>
+      </div>
+      <button id="restart">Play Again</button>
+    `;
     game.appendChild(over);
     over.style.display='flex';
-    document.getElementById('restart').addEventListener('click', restart);
+
+    const nameInput = over.querySelector('#playerName');
+    const saveBtn = over.querySelector('#saveBtn');
+    const restartBtn = over.querySelector('#restart');
+
+    const lastName = localStorage.getItem('knightRunner_lastName') || '';
+    if (lastName) nameInput.value = lastName;
+
+    saveBtn.addEventListener('click', ()=>{
+      const name = (nameInput.value || 'Player').trim();
+      localStorage.setItem('knightRunner_lastName', name);
+      addScore(name, finalScore);
+      saveBtn.disabled = true;
+      renderLeaderboard(name, finalScore);
+    });
+
+    restartBtn.addEventListener('click', restart);
   }
 
   function restart(){
@@ -401,7 +483,7 @@ h1{margin:16px 12px 4px;font-size:clamp(20px,3vw,32px);}
     requestAnimationFrame(loop);
   }
 
-  /* Kickoff */
+  /* ---------- Kickoff ---------- */
   updateDots();
   scheduleSpawn();
   scheduleDifficulty();
