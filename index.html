@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Knight Runner</title>
+<title>Knight Runner Two-Step Move</title>
 <style>
 body {
   margin:0;
@@ -80,18 +80,14 @@ h1 { margin:10px; text-shadow:2px2px8px #000; }
 </style>
 </head>
 <body>
-<h1>Knight Runner</h1>
+<h1>Knight Runner Two-Step Move</h1>
 <div id="game-container"></div>
 <div id="score">Score:0</div>
 <div id="osd-controls">
-  <div class="osd-button" data-dir="up-left">UL</div>
-  <div class="osd-button" data-dir="up-right">UR</div>
-  <div class="osd-button" data-dir="right-up">RU</div>
-  <div class="osd-button" data-dir="right-down">RD</div>
-  <div class="osd-button" data-dir="down-right">DR</div>
-  <div class="osd-button" data-dir="down-left">DL</div>
-  <div class="osd-button" data-dir="left-down">LD</div>
-  <div class="osd-button" data-dir="left-up">LU</div>
+  <div class="osd-button" data-dir="up">↑</div>
+  <div class="osd-button" data-dir="down">↓</div>
+  <div class="osd-button" data-dir="left">←</div>
+  <div class="osd-button" data-dir="right">→</div>
 </div>
 
 <script>
@@ -114,12 +110,6 @@ const gridSize = 75;
 let knightPos = {x:4, y:4};
 let score = 0;
 let obstacles = [];
-
-// True knight moves
-const knightMoves = [
-  {x:2,y:1}, {x:1,y:2}, {x:-1,y:2}, {x:-2,y:1},
-  {x:-2,y:-1}, {x:-1,y:-2}, {x:1,y:-2}, {x:2,y:-1}
-];
 
 function placeKnight(){
   knight.style.left = `${knightPos.x*gridSize + 12.5}px`;
@@ -148,42 +138,60 @@ function moveObstacles(){
   });
 }
 
-// Move knight based on chosen L-shape
-function moveKnight(dirIndex){
-  const move = knightMoves[dirIndex];
+function constrainPosition(pos){
+  if(pos.x<0) pos.x=0;
+  if(pos.y<0) pos.y=0;
+  if(pos.x>7) pos.x=7;
+  if(pos.y>7) pos.y=7;
+}
+
+// --- Two-step move system ---
+let firstStep = null; // stores {dx, dy} of first click
+
+const dirMap = {
+  'up': {x:0, y:-1},
+  'down': {x:0, y:1},
+  'left': {x:-1, y:0},
+  'right': {x:1, y:0}
+};
+
+function handleStep(dir){
+  const move = dirMap[dir];
   if(!move) return;
-  knightPos.x += move.x;
-  knightPos.y += move.y;
-  constrainPosition();
-  placeKnight();
+
+  if(!firstStep){
+    // First click: must move 2 squares
+    firstStep = {dx: move.x*2, dy: move.y*2, dir: move};
+  } else {
+    // Second click: must be perpendicular short step
+    const step = move;
+    // check perpendicular
+    const dot = firstStep.dir.x*step.x + firstStep.dir.y*step.y;
+    if(dot !== 0 && (Math.abs(step.x)+Math.abs(step.y)===1)){
+      // valid L-shape, apply move
+      knightPos.x += firstStep.dx + step.x;
+      knightPos.y += firstStep.dy + step.y;
+      constrainPosition(knightPos);
+      placeKnight();
+    }
+    // cancel first step in any case
+    firstStep = null;
+  }
 }
 
-function constrainPosition(){
-  if(knightPos.x<0) knightPos.x=0;
-  if(knightPos.y<0) knightPos.y=0;
-  if(knightPos.x>7) knightPos.x=7;
-  if(knightPos.y>7) knightPos.y=7;
-}
-
-function gameOver(){ 
-  clearInterval(moveInterval); 
-  clearInterval(spawnInterval);
-  gameOverText.style.display='block'; 
-}
-
-// Map keyboard arrows to L-shaped moves
+// Keyboard
 document.addEventListener('keydown', e=>{
   switch(e.key){
-    case "ArrowUp": moveKnight(5); break;   // example: up-left
-    case "ArrowDown": moveKnight(2); break; // example: down-left
-    case "ArrowLeft": moveKnight(6); break; // left moves
-    case "ArrowRight": moveKnight(1); break;// right moves
+    case "ArrowUp": handleStep('up'); break;
+    case "ArrowDown": handleStep('down'); break;
+    case "ArrowLeft": handleStep('left'); break;
+    case "ArrowRight": handleStep('right'); break;
   }
 });
 
-// On-screen buttons (map to knightMoves indices 0-7)
-document.querySelectorAll('.osd-button').forEach((btn, i)=>{
-  btn.addEventListener('click', ()=> moveKnight(i));
+// OSD buttons
+document.querySelectorAll('.osd-button').forEach(btn=>{
+  btn.addEventListener('click', ()=> handleStep(btn.dataset.dir));
 });
 
 // Intervals
@@ -191,6 +199,12 @@ let moveInterval = setInterval(()=>{ moveObstacles(); }, 20);
 let spawnInterval = setInterval(()=>{ addObstacle(); }, 800);
 
 placeKnight();
+
+function gameOver(){ 
+  clearInterval(moveInterval); 
+  clearInterval(spawnInterval);
+  gameOverText.style.display='block'; 
+}
 </script>
 </body>
 </html>
