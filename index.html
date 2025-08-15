@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Knight Runner — Arrow Highlight</title>
+<title>Knight Runner — Faster</title>
 <style>
 :root{--board:600px;--cell:75px;}
 *{box-sizing:border-box;}
@@ -66,7 +66,7 @@ let enemies = [];
 let dots = [];
 let startTime = performance.now();
 let running = true;
-let baseEnemyMoveDelay = 1200, baseSpawnDelay=1500, minEnemyMoveDelay=400, minSpawnDelay=500;
+let baseEnemyMoveDelay = 1200, baseSpawnDelay=1500;
 
 // Arrow key 2-step input
 let arrowStep=0, firstArrow=null;
@@ -168,12 +168,20 @@ let enemyMoveDelay=baseEnemyMoveDelay, spawnDelay=baseSpawnDelay;
 function scheduleEnemyMove(){ enemyMoveTimer=setTimeout(function tick(){ if(!running) return; moveEnemies(); scheduleEnemyMove(); }, enemyMoveDelay); }
 function scheduleSpawn(){ spawnTimer=setTimeout(function tick(){ if(!running) return; spawnEnemy(); scheduleSpawn(); }, spawnDelay); }
 function scheduleScore(){ scoreTimer=setInterval(()=>{ if(!running) return; scoreEl.textContent=((performance.now()-startTime)/1000).toFixed(1); },100); }
-function scheduleDifficulty(){ difficultyTimer=setInterval(()=>{ if(!running) return;
-enemyMoveDelay = Math.max(minEnemyMoveDelay, enemyMoveDelay - 20);
-spawnDelay = Math.max(minSpawnDelay, spawnDelay - 25);
-speedEl.textContent = (baseEnemyMoveDelay/enemyMoveDelay).toFixed(1)+'×';
-clearTimeout(enemyMoveTimer); clearTimeout(spawnTimer); scheduleEnemyMove(); scheduleSpawn();
-},6000); }
+
+// --- Double speed difficulty, no limit ---
+function scheduleDifficulty(){
+  difficultyTimer = setInterval(() => {
+    if(!running) return;
+    enemyMoveDelay -= 40;
+    spawnDelay -= 50;
+    speedEl.textContent = (baseEnemyMoveDelay/enemyMoveDelay).toFixed(1)+'×';
+    clearTimeout(enemyMoveTimer);
+    clearTimeout(spawnTimer);
+    scheduleEnemyMove();
+    scheduleSpawn();
+  }, 6000);
+}
 
 // --- Arrow key knight logic ---
 const DIRS={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
@@ -184,7 +192,6 @@ function processArrow(dir){
   else if(firstArrow.y!==0 && dir.x!==0){ tx+=dir.x; ty+=dy; }
   else if(firstArrow.x=== -dir.x && firstArrow.y=== -dir.y){ arrowStep=0; firstArrow=null; hideArrowHighlight(); return; }
   else{ arrowStep=0; firstArrow=null; hideArrowHighlight(); return; }
-  if(tx<0||tx>=SIZE||ty<0||ty>=SIZE){ arrowStep=0; firstArrow=null; hideArrowHighlight(); return; }
   knight.x=tx; knight.y=ty; placeKnight(); checkCollision(); updateDots(); arrowStep=0; firstArrow=null; hideArrowHighlight();
 }
 document.addEventListener('keydown',e=>{ if(!running) return; const dir=DIRS[e.key.replace('Arrow','').toLowerCase()]; if(!dir) return; processArrow(dir); });
