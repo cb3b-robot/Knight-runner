@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Knight Runner — KR-2025-08-15-k</title>
+<title>Knight Runner — KR-2025-08-15-k1</title>
 <style>
 :root{
   --board:600px;
@@ -48,14 +48,13 @@ button,input{font-size:16px}
   position:absolute;width:var(--cell);height:var(--cell);
   display:flex;align-items:center;justify-content:center;
   pointer-events:none;user-select:none;
-  /* Prefer symbol fonts that render chess as monochrome text, not emoji */
   font-family: "Noto Sans Symbols 2","Segoe UI Symbol","Apple Symbols","Symbola",
                system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
   line-height:1;
 }
 .knight{
   z-index:110;
-  color:#fff; /* solid ♞ (text style) tinted white => filled look */
+  color:#fff; /* solid ♞ tinted white => filled look */
   font-size: calc(var(--cell) * var(--knight-scale));
   -webkit-text-stroke: 0.5px rgba(0,0,0,.35);
   text-shadow:0 2px 6px #0009;
@@ -213,7 +212,7 @@ button,input{font-size:16px}
   /* ===== HUD refs ===== */
   const scoreEl = document.getElementById('score');
   const speedEl = document.getElementById('speed');
-  const lbList  = document.getElementById('lbList');
+  const lbList  = document.getElementById('lbList'); /* ← keep this one */
   const muteBtn = document.getElementById('muteBtn');
   const bShield = document.getElementById('bShield');
   const bSpeed  = document.getElementById('bSpeed');
@@ -223,8 +222,8 @@ button,input{font-size:16px}
   const SIZE = 8;
   const CELL = () => game.getBoundingClientRect().width / SIZE;
 
-  // Use text presentation (VS-15) so these render as monochrome glyphs, not emoji.
-  const VS = '\\uFE0E';
+  // Force text presentation (VS-15) so glyphs are monochrome, not emoji.
+  const VS = '\uFE0E';
   const GLYPHS = {
     knight: ('♞' + VS),
     pawn:   ('♟' + VS),
@@ -353,7 +352,7 @@ button,input{font-size:16px}
   muteBtn.addEventListener('click', ()=>{
     unlockAudio();
     audio.enabled = !audio.enabled;
-    try{ localStorage.setItem('KR_mute', String(!audio.enabled)); }catch(e){}
+    try{ localStorage.setItem(MUTE_KEY, String(!audio.enabled)); }catch(e){}
     applyMuteUI();
   });
   ['pointerdown','keydown'].forEach(evt=>document.addEventListener(evt, unlockAudio, {once:true}));
@@ -368,7 +367,6 @@ button,input{font-size:16px}
     list.sort((a,b)=> b.score - a.score || a.ts - b.ts);
     const top10 = list.slice(0,10); saveScores(top10); return top10;
   }
-  const lbList = document.getElementById('lbList');
   function renderLeaderboard(){
     lbList.innerHTML='';
     const list = loadScores();
@@ -422,10 +420,9 @@ button,input{font-size:16px}
   let knight = { x:3, y:6 };
   const knightEl = document.createElement('div');
   knightEl.className = 'piece knight';
-  knightEl.textContent = GLYPHS.knight; // solid glyph + text style (VS-15)
+  knightEl.textContent = GLYPHS.knight;
   game.appendChild(knightEl);
   function placeKnight(){
-    // extra safety clamp (prevents any chance of slipping off-grid)
     knight.x = clampCell(knight.x);
     knight.y = clampCell(knight.y);
     knightEl.style.left = (knight.x*CELL()) + 'px';
@@ -681,7 +678,6 @@ button,input{font-size:16px}
 
   /* ===== Knight movement ===== */
   function moveKnightTo(tx,ty){
-    // absolute safety: refuse & clamp
     if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) return;
     knight.x = clampCell(tx);
     knight.y = clampCell(ty);
@@ -706,7 +702,7 @@ button,input{font-size:16px}
     if (arrowStep===0){
       const tx2=knight.x + dir.x*2, ty2=knight.y + dir.y*2;
       const inside = (tx2>=0 && tx2<SIZE && ty2>=0 && ty2<SIZE);
-      if (!inside){ drawFirstArrow(dir, true); return; } // show invalid & shake
+      if (!inside){ drawFirstArrow(dir, true); return; }
       firstArrow=dir; arrowStep=1; drawFirstArrow(dir, false); return;
     }
     const dx2=firstArrow.x*2, dy2=firstArrow.y*2;
