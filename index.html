@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Knight Runner — KR-2025-08-15-k4</title>
+<title>Knight Runner — KR-2025-08-15-k5</title>
 <style>
 :root{
   --board:600px;
   --cell: calc(var(--board) / 8);
-  --knight-scale: 0.92;
+  --knight-scale: 1.05; /* a bit larger */
 }
 *{box-sizing:border-box;}
 html,body{height:100%; min-height:100svh;}
@@ -137,9 +137,12 @@ button,input{font-size:16px}
 #errorOverlay{position:fixed;inset:0;background:#1b1b1bcc;color:#fff;z-index:9999;display:none;align-items:flex-start;justify-content:center;padding:16px;overflow:auto}
 #errorOverlay pre{max-width:900px;width:100%;background:#2a2a2a;border:1px solid #ff6b6b;border-radius:10px;padding:12px;white-space:pre-wrap;word-break:break-word}
 
-/* Short screens: keep header visible if user scrolls list when collapsed */
-@media (max-height: 740px) {
-  #leaderboard header { position: sticky; top: 0; z-index: 1; }
+/* Short screens & iPad-friendly tweaks: compact HUD so the board can be taller */
+@media (max-height: 900px) {
+  h1{ margin-top: 4px; }
+  .hud{ gap: 6px; }
+  .pill{ padding: 4px 8px; }
+  #game{ border-width: 3px; } /* more room for the board */
 }
 </style>
 </head>
@@ -205,15 +208,18 @@ button,input{font-size:16px}
   function rectH(el){ if(!el) return 0; const r=el.getBoundingClientRect(); return r && r.height ? r.height : 0; }
   function bodyVPad(){ const cs=getComputedStyle(document.body); return (parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0); }
 
+  /* iPad-optimized sizing */
   function setBoardSize(){
     const vh=getVH(), vw=getVW();
     const titleH = rectH(document.querySelector('h1'));
     const hudH   = rectH(hud);
     const padV   = bodyVPad();
 
-    const gaps = 64; /* breathing room for iOS bars */
-    const maxByHeight = Math.max(240, vh - titleH - hudH - padV - gaps);
-    const maxByWidth  = Math.max(240, vw - 16);
+    const isPortrait = vh >= vw;
+    const extra = isPortrait ? 28 : 12; // tighter gap than k4
+
+    const maxByHeight = Math.max(240, vh - titleH - hudH - padV - extra);
+    const maxByWidth  = Math.max(240, vw - 12);
     const size = Math.floor(Math.min(maxByHeight, maxByWidth));
     root.style.setProperty('--board', size + 'px');
   }
@@ -317,7 +323,7 @@ button,input{font-size:16px}
     const list = loadScores();
     list.push({ name:(name||'Player').trim(), score:+score, ts:Date.now() });
     list.sort((a,b)=> b.score - a.score || a.ts - b.ts);
-    const capped = list.slice(0, 500); // keep storage sane
+    const capped = list.slice(0, 500);
     saveScores(capped);
     return capped;
   }
@@ -420,7 +426,7 @@ button,input{font-size:16px}
     }
   }
 
-  /* Knight move dots */
+  /* Knight move dots (always visible) */
   const knightOffsets = [{x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},{x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}];
   let dots=[];
   function updateDots(){
@@ -624,15 +630,16 @@ button,input{font-size:16px}
     requestAnimationFrame(loop);
   }
 
-  /* Two-step arrow */
+  /* Two-step arrow controls */
   const DIRS = { up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
   let arrowStep=0, firstArrow=null;
   function processArrow(dir){
     if (arrowStep===0){
       const tx2=knight.x + dir.x*2, ty2=knight.y + dir.y*2;
       const inside = (tx2>=0 && tx2<SIZE && ty2>=0 && ty2<SIZE);
-      if (!inside){ drawFirstArrow(dir, true); return; }
-      firstArrow=dir; arrowStep=1; drawFirstArrow(dir, false); return;
+      drawFirstArrow(dir, !inside);
+      if (!inside) return;
+      firstArrow=dir; arrowStep=1; return;
     }
     const dx2=firstArrow.x*2, dy2=firstArrow.y*2;
     let tx=knight.x, ty=knight.y;
@@ -700,7 +707,7 @@ button,input{font-size:16px}
     SFX.restart(); Music.start();
   }
 
-  /* Layout sync */
+  /* Layout sync (resize / orientation) */
   function layoutAll(scaleFrom){
     const cell=CELL();
     const squares=document.querySelectorAll('.square');
