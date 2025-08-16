@@ -1,17 +1,16 @@
 // =========================================================
-// Knight Runner — main.js (syntax-safe, iPad-friendly)
+// Knight Runner — main.js (case-safe, no duplicate declarations)
 // =========================================================
 /* global ResizeObserver */
 window.__KR_BOOT__ = 'loaded';
 
 // ---------- DOM refs ----------
-const root   = document.documentElement;
-const game   = document.getElementById('game');
-const hud    = document.getElementById('hud');
-const scoreEl= document.getElementById('score');
-const speedEl= document.getElementById('speed');
-const muteBtn= document.getElementById('muteBtn');
-const lbList = document.getElementById('lbList');
+const root     = document.documentElement;
+const game     = document.getElementById('game');
+const scoreEl  = document.getElementById('score');
+const speedEl  = document.getElementById('speed');
+const muteBtn  = document.getElementById('muteBtn');
+const lbList   = document.getElementById('lbList');
 const resetBtn = document.getElementById('resetScores');
 const toggleLB = document.getElementById('toggleLB');
 const bShield  = document.getElementById('bShield');
@@ -49,8 +48,10 @@ function unlockAudio(){
   audio.unlocked = true;
   Music.start();
 }
-function tone(opts){
-  const o = opts||{};
+['pointerdown','keydown'].forEach(function(evt){ document.addEventListener(evt, unlockAudio, {once:true}); });
+
+function tone(o){
+  o = o||{};
   const freq=o.freq||440, type=o.type||'sine', dur=o.dur||0.12, gain=o.gain||0.05;
   const attack=o.attack||0.01, release=o.release||0.12, slideTo=(o.slideTo==null?null:o.slideTo), slideTime=o.slideTime||0.08;
   if (!audio.enabled) return; ensureAudio();
@@ -114,7 +115,6 @@ const Music = (function(){
 })();
 function applyMuteUI(){ muteBtn.textContent = audio.enabled ? '🔊' : '🔇'; muteBtn.setAttribute('aria-pressed', String(!audio.enabled)); Music.setEnabled(audio.enabled); }
 applyMuteUI();
-['pointerdown','keydown'].forEach(function(evt){ document.addEventListener(evt, unlockAudio, {once:true}); });
 muteBtn.addEventListener('click', function(){ unlockAudio(); audio.enabled=!audio.enabled; try{localStorage.setItem(MUTE_KEY,String(!audio.enabled));}catch(e){} applyMuteUI(); });
 
 // --------------------------------------------------------
@@ -186,7 +186,7 @@ let knight = { x:3, y:6 };
 const knightEl = document.createElement('div');
 knightEl.className = 'piece knight';
 knightEl.setAttribute('data-glyph', GLYPHS.knight);
-knightEl.textContent = '';
+knightEl.textContent = ''; // content provided via CSS ::before using data-glyph
 game.appendChild(knightEl);
 function placeKnight(){ knightEl.style.left=(knight.x*CELL())+'px'; knightEl.style.top=(knight.y*CELL())+'px'; }
 placeKnight();
@@ -230,7 +230,7 @@ const knightOffsets = [
   {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
   {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
 ];
-let dots=[]; // <-- declared ONCE
+let dots=[]; // declared ONCE
 function updateDots(){
   for (let i=0;i<dots.length;i++) dots[i].remove();
   dots=[];
@@ -267,7 +267,6 @@ function spawnPowerUp(){
     game.appendChild(el);
     const expiresAt=performance.now()+5500;
     powerups.push({el,type,x,y,expiresAt});
-    if(!powerups[powerups.length-1].el){ console.warn('[KR] Spawned power-up missing el!', powerups[powerups.length-1]); }
     SFX.spawnPower(); break;
   }
 }
