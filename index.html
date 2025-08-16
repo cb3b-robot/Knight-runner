@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Knight Runner — KR-2025-08-15-k1</title>
+<title>Knight Runner — KR-2025-08-15-k3</title>
 <style>
 :root{
   --board:600px;
   --cell: calc(var(--board) / 8);
-  --knight-scale: 0.92; /* tweak 0.88–0.98 to taste */
+  --knight-scale: 0.92;
 }
 *{box-sizing:border-box;}
 html,body{height:100%; min-height:100svh;}
@@ -17,7 +17,8 @@ body{
   font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
   display:flex;flex-direction:column;align-items:center;gap:10px;
   padding: env(safe-area-inset-top) 8px env(safe-area-inset-bottom);
-  overflow:hidden;
+  overflow-x:hidden;  /* page may scroll vertically when expanded */
+  overflow-y:auto;
 }
 h1{margin:6px 0 0;font-size:clamp(18px,3.8vw,28px);}
 .hud{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;font-weight:600;text-shadow:0 1px 2px #0008;padding:4px 0;}
@@ -48,13 +49,12 @@ button,input{font-size:16px}
   position:absolute;width:var(--cell);height:var(--cell);
   display:flex;align-items:center;justify-content:center;
   pointer-events:none;user-select:none;
-  font-family: "Noto Sans Symbols 2","Segoe UI Symbol","Apple Symbols","Symbola",
-               system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  font-family:"Noto Sans Symbols 2","Segoe UI Symbol","Apple Symbols","Symbola",
+              system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
   line-height:1;
 }
 .knight{
-  z-index:110;
-  color:#fff; /* solid ♞ tinted white => filled look */
+  z-index:110;color:#fff;
   font-size: calc(var(--cell) * var(--knight-scale));
   -webkit-text-stroke: 0.5px rgba(0,0,0,.35);
   text-shadow:0 2px 6px #0009;
@@ -94,9 +94,10 @@ button,input{font-size:16px}
 
 /* Leaderboard */
 #leaderboard{
+  position:relative;
   width:min(var(--board), 95vw);
   background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;
-  box-shadow:0 8px 24px #0007;overflow:hidden;margin:6px 0 10px;
+  box-shadow:0 8px 24px #0007;overflow:visible;margin:6px 0 16px;
 }
 #leaderboard header{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#222;border-bottom:1px solid #2f2f2f;}
 #leaderboard h3{margin:0;font-size:14px;letter-spacing:.3px;}
@@ -104,13 +105,24 @@ button,input{font-size:16px}
 #leaderboard ol{
   list-style:none;margin:0;padding:8px 10px;
   display:grid;grid-template-columns:1fr auto;row-gap:4px;
-  max-height:20dvh; overflow:auto;
 }
 #leaderboard li{display:contents;}
 #leaderboard .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px;}
 #leaderboard .score{font-variant-numeric:tabular-nums;}
-#resetScores{padding:6px 10px;border-radius:8px;border:1px solid #ff7675;background:#ff7675;color:#111;cursor:pointer;font-weight:700;}
-#resetScores:active{transform:translateY(1px);}
+#resetScores,#toggleLB{padding:6px 10px;border-radius:8px;border:1px solid #444;background:#2b2b2b;color:#fff;cursor:pointer;font-weight:700;}
+#resetScores{border-color:#ff7675;background:#ff7675;color:#111;}
+#resetScores:active,#toggleLB:active{transform:translateY(1px);}
+
+/* Collapsed vs expanded */
+#leaderboard:not(.expanded) ol{ max-height: 18dvh; overflow:hidden; }
+#leaderboard.expanded ol{ max-height:none; overflow:visible; }
+/* Fade hint when collapsed */
+#leaderboard:not(.expanded)::after{
+  content:""; position:absolute; left:0; right:0; bottom:0;
+  height:28px; pointer-events:none;
+  background:linear-gradient(to bottom, rgba(26,26,26,0), #1a1a1a 70%);
+  border-bottom-left-radius:12px; border-bottom-right-radius:12px;
+}
 
 /* Sparkle */
 .sparkle{position:absolute;pointer-events:none;z-index:150;width:8px;height:8px;border-radius:50%;background:#fff;opacity:.9;animation:spark .5s ease-out forwards;}
@@ -120,13 +132,9 @@ button,input{font-size:16px}
 #errorOverlay{position:fixed;inset:0;background:#1b1b1bcc;color:#fff;z-index:9999;display:none;align-items:flex-start;justify-content:center;padding:16px;overflow:auto}
 #errorOverlay pre{max-width:900px;width:100%;background:#2a2a2a;border:1px solid #ff6b6b;border-radius:10px;padding:12px;white-space:pre-wrap;word-break:break-word}
 
-/* Compact leaderboard on short screens */
-@media (max-width: 420px){
-  :root{ --knight-scale: 0.95; } /* a tad larger on small phones */
-}
+/* Short screens: keep header visible if user scrolls list when collapsed */
 @media (max-height: 740px) {
-  #leaderboard { max-height: 12dvh; }
-  #leaderboard header { position: sticky; top: 0; }
+  #leaderboard header { position: sticky; top: 0; z-index: 1; }
 }
 </style>
 </head>
@@ -145,11 +153,12 @@ button,input{font-size:16px}
 <div id="game"></div>
 
 <!-- Local Leaderboard -->
-<div id="leaderboard">
+<div id="leaderboard" class="">
   <header>
     <h3>Leaderboard (This device)</h3>
     <div style="display:flex; gap:8px; align-items:center;">
       <div id="lbStatus">saved locally</div>
+      <button id="toggleLB" title="Expand/collapse">Show more</button>
       <button id="resetScores" title="Clear saved scores">Reset Scores</button>
     </div>
   </header>
@@ -158,7 +167,9 @@ button,input{font-size:16px}
 
 <!-- Error overlay (shows any JS errors on-screen) -->
 <div id="errorOverlay"><pre id="errorText"></pre></div>
+
 <script>
+/* Error catcher overlay */
 (function(){
   const overlay = document.getElementById('errorOverlay');
   const text = document.getElementById('errorText');
@@ -177,8 +188,9 @@ button,input{font-size:16px}
 </script>
 
 <script>
+/* ===== Game ===== */
 (() => {
-  /* ===== Responsive board ===== */
+  /* Responsive board */
   const root = document.documentElement;
   const game = document.getElementById('game');
   const hud  = document.querySelector('.hud');
@@ -192,11 +204,10 @@ button,input{font-size:16px}
     const vh=getVH(), vw=getVW();
     const titleH = rectH(document.querySelector('h1'));
     const hudH   = rectH(hud);
-    const lbH    = rectH(document.getElementById('leaderboard'));
     const padV   = bodyVPad();
 
-    const gaps = 64; // avoid bottom clipping with iOS bars
-    const maxByHeight = Math.max(240, vh - titleH - hudH - lbH - padV - gaps);
+    const gaps = 64;
+    const maxByHeight = Math.max(240, vh - titleH - hudH - padV - gaps);
     const maxByWidth  = Math.max(240, vw - 16);
     const size = Math.floor(Math.min(maxByHeight, maxByWidth));
     root.style.setProperty('--board', size + 'px');
@@ -209,74 +220,45 @@ button,input{font-size:16px}
   }
   setBoardSize(); setTimeout(setBoardSize,200); setTimeout(setBoardSize,800);
 
-  /* ===== HUD refs ===== */
+  /* HUD refs */
   const scoreEl = document.getElementById('score');
   const speedEl = document.getElementById('speed');
-  const lbList  = document.getElementById('lbList'); /* ← keep this one */
+  const lbList  = document.getElementById('lbList');
   const muteBtn = document.getElementById('muteBtn');
   const bShield = document.getElementById('bShield');
   const bSpeed  = document.getElementById('bSpeed');
   const bSlow   = document.getElementById('bSlow');
 
-  /* ===== Constants ===== */
+  /* Constants */
   const SIZE = 8;
   const CELL = () => game.getBoundingClientRect().width / SIZE;
-
-  // Force text presentation (VS-15) so glyphs are monochrome, not emoji.
   const VS = '\uFE0E';
-  const GLYPHS = {
-    knight: ('♞' + VS),
-    pawn:   ('♟' + VS),
-    rook:   ('♜' + VS),
-    bishop: ('♝' + VS),
-    queen:  ('♛' + VS),
-  };
+  const GLYPHS = { knight:'♞'+VS, pawn:'♟'+VS, rook:'♜'+VS, bishop:'♝'+VS, queen:'♛'+VS };
 
-  /* ===== Audio (SFX + Music) ===== */
+  /* Audio (SFX+Music) */
   const MUTE_KEY = 'KR_mute';
   let audio = { ctx:null, enabled:true, unlocked:false };
-  try{ audio.enabled = localStorage.getItem(MUTE_KEY)!=='true' ? true : false; }catch(e){}
+  try{ audio.enabled = localStorage.getItem(MUTE_KEY)!=='true'; }catch(e){}
   function ensureAudio(){ if (audio.ctx) return; audio.ctx = new (window.AudioContext||window.webkitAudioContext)(); }
   function unlockAudio(){
-    ensureAudio();
-    if (audio.unlocked) return;
-    const silent = audio.ctx.createBufferSource();
-    silent.buffer = audio.ctx.createBuffer(1,1,22050);
-    silent.connect(audio.ctx.destination);
-    try { silent.start(0); } catch(e) {}
+    ensureAudio(); if (audio.unlocked) return;
+    const silent = audio.ctx.createBufferSource(); silent.buffer = audio.ctx.createBuffer(1,1,22050);
+    silent.connect(audio.ctx.destination); try { silent.start(0); } catch(e) {}
     audio.unlocked = true; Music.start();
   }
   function now(){ ensureAudio(); return audio.ctx.currentTime; }
-
-  function tone(opts){
-    opts = opts || {};
-    const freq = (opts.freq==null)?440:opts.freq;
-    const type = opts.type || 'sine';
-    const dur = (opts.dur==null)?0.12:opts.dur;
-    const gain = (opts.gain==null)?0.05:opts.gain;
-    const attack = (opts.attack==null)?0.002:opts.attack;
-    const release = (opts.release==null)?0.08:opts.release;
-    const slideTo = (opts.slideTo==null)?null:opts.slideTo;
-    const slideTime = (opts.slideTime==null)?0.08:opts.slideTime;
-
-    if (!audio.enabled) return;
-    ensureAudio();
-    const t0 = now();
-    const osc = audio.ctx.createOscillator();
-    const g = audio.ctx.createGain();
-    const f = audio.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=8000;
-    osc.type=type; osc.frequency.value=freq;
-    g.gain.setValueAtTime(0, t0);
-    g.gain.linearRampToValueAtTime(gain, t0+attack);
-    if (slideTo!=null){ osc.frequency.setValueAtTime(freq, t0); osc.frequency.linearRampToValueAtTime(slideTo, t0+slideTime); }
-    g.gain.setValueAtTime(gain, t0+dur);
-    g.gain.linearRampToValueAtTime(0.0001, t0+dur+release);
-    osc.connect(f); f.connect(g); g.connect(audio.ctx.destination);
-    osc.start(t0); osc.stop(t0+dur+release+0.02);
+  function tone(o){ o=o||{}; if(!audio.enabled) return; ensureAudio();
+    const t0=now(), osc=audio.ctx.createOscillator(), g=audio.ctx.createGain(), f=audio.ctx.createBiquadFilter();
+    const freq=(o.freq==null)?440:o.freq, type=o.type||'sine', dur=(o.dur==null)?0.12:o.dur, gain=(o.gain==null)?0.05:o.gain;
+    const attack=(o.attack==null)?0.002:o.attack, release=(o.release==null)?0.08:o.release, slideTo=(o.slideTo==null)?null:o.slideTo, slideTime=(o.slideTime==null)?0.08:o.slideTime;
+    f.type='lowpass'; f.frequency.value=8000; osc.type=type; osc.frequency.value=freq;
+    g.gain.setValueAtTime(0,t0); g.gain.linearRampToValueAtTime(gain,t0+attack);
+    if(slideTo!=null){ osc.frequency.setValueAtTime(freq,t0); osc.frequency.linearRampToValueAtTime(slideTo,t0+slideTime); }
+    g.gain.setValueAtTime(gain,t0+dur); g.gain.linearRampToValueAtTime(0.0001,t0+dur+release);
+    osc.connect(f); f.connect(g); g.connect(audio.ctx.destination); osc.start(t0); osc.stop(t0+dur+release+0.02);
   }
-
   const SFX = {
-    jump(){ tone({freq:600,type:'square',gain:0.04,attack:0.003,release:0.08, slideTo:760, slideTime:0.06}); },
+    jump(){ tone({freq:600,type:'square',gain:0.04,attack:0.003,release:0.08,slideTo:760,slideTime:0.06}); },
     pickupShield(){ tone({freq:520,type:'triangle',gain:0.05,attack:0.004,release:0.12}); tone({freq:780,type:'triangle',gain:0.04,attack:0.004,release:0.12, slideTo:880, slideTime:0.08}); },
     pickupSpeed(){ tone({freq:750,type:'square',gain:0.05,attack:0.003,release:0.09}); },
     pickupSlow(){ tone({freq:420,type:'sine',gain:0.05,attack:0.003,release:0.18, slideTo:320, slideTime:0.14}); },
@@ -286,78 +268,43 @@ button,input{font-size:16px}
     gameOver(){ tone({freq:440,type:'sawtooth',gain:0.06,attack:0.004,release:0.25, slideTo:180, slideTime:0.25}); },
     restart(){ tone({freq:660,type:'triangle',gain:0.05,attack:0.003,release:0.12, slideTo:880, slideTime:0.08}); }
   };
-
-  const Music = (() => {
-    let master, padGain, arpGain, delay, feedback, lowpass, timer=null, step=0, playing=false;
-    function init(){
-      ensureAudio(); if (master) return;
-      master = audio.ctx.createGain(); padGain = audio.ctx.createGain(); arpGain = audio.ctx.createGain();
-      delay = audio.ctx.createDelay(1.0); delay.delayTime.value=0.22;
-      feedback = audio.ctx.createGain(); feedback.gain.value=0.25;
-      lowpass = audio.ctx.createBiquadFilter(); lowpass.type='lowpass'; lowpass.frequency.value=2000;
+  const Music = (()=>{ let master,padGain,arpGain,delay,feedback,lowpass,timer=null,step=0,playing=false;
+    function init(){ ensureAudio(); if(master) return;
+      master=audio.ctx.createGain(); padGain=audio.ctx.createGain(); arpGain=audio.ctx.createGain();
+      delay=audio.ctx.createDelay(1); delay.delayTime.value=0.22; feedback=audio.ctx.createGain(); feedback.gain.value=0.25;
+      lowpass=audio.ctx.createBiquadFilter(); lowpass.type='lowpass'; lowpass.frequency.value=2000;
       master.gain.value=0.18; padGain.gain.value=0.35; arpGain.gain.value=0.45;
-      const bus = audio.ctx.createGain();
-      padGain.connect(bus); arpGain.connect(bus); bus.connect(lowpass);
-      lowpass.connect(delay); delay.connect(feedback); feedback.connect(delay);
-      delay.connect(master); lowpass.connect(master); master.connect(audio.ctx.destination);
+      const bus=audio.ctx.createGain(); padGain.connect(bus); arpGain.connect(bus); bus.connect(lowpass);
+      lowpass.connect(delay); delay.connect(feedback); feedback.connect(delay); delay.connect(master); lowpass.connect(master); master.connect(audio.ctx.destination);
     }
     function mtof(n){ return 440*Math.pow(2,(n-69)/12); }
-    function playNote(opts){
-      opts = opts || {};
-      const freq = opts.freq, when = opts.when;
-      const dur = (opts.dur==null)?0.22:opts.dur;
-      const type = opts.type || 'triangle';
-      const gain = (opts.gain==null)?0.25:opts.gain;
-      const target = opts.target || arpGain;
-      if (!audio.enabled) return;
-      const osc=audio.ctx.createOscillator(), g=audio.ctx.createGain();
-      osc.type=type; osc.frequency.value=freq;
-      g.gain.setValueAtTime(0.0001,when);
-      g.gain.linearRampToValueAtTime(gain,when+0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001,when+dur);
-      osc.connect(g); g.connect(target); osc.start(when); osc.stop(when+dur+0.02);
+    function playNote({freq,when,dur=0.22,type='triangle',gain=0.25,target=arpGain}){ if(!audio.enabled) return;
+      const o=audio.ctx.createOscillator(), g=audio.ctx.createGain(); o.type=type; o.frequency.value=freq;
+      g.gain.setValueAtTime(0.0001,when); g.gain.linearRampToValueAtTime(gain,when+0.01); g.gain.exponentialRampToValueAtTime(0.0001,when+dur);
+      o.connect(g); g.connect(target); o.start(when); o.stop(when+dur+0.02);
     }
-    function playPad(opts){
-      opts = opts || {};
-      const freq = opts.freq, when = opts.when;
-      const dur = (opts.dur==null)?3.8:opts.dur;
-      const gain = (opts.gain==null)?0.10:opts.gain;
-      if (!audio.enabled) return;
-      const o1=audio.ctx.createOscillator(), o2=audio.ctx.createOscillator(), g=audio.ctx.createGain();
-      o1.type='sine'; o2.type='sine'; o1.frequency.value=freq; o2.frequency.value=freq*Math.pow(2, 7/1200);
+    function playPad({freq,when,dur=3.8,gain=0.10}){ if(!audio.enabled) return;
+      const o1=audio.ctx.createOscillator(), o2=audio.ctx.createOscillator(), g=audio.ctx.createGain(); o1.type='sine'; o2.type='sine';
+      o1.frequency.value=freq; o2.frequency.value=freq*Math.pow(2,7/1200);
       g.gain.setValueAtTime(0.0001,when); g.gain.linearRampToValueAtTime(gain,when+0.8); g.gain.linearRampToValueAtTime(0.0001,when+dur);
-      o1.connect(g); o2.connect(g); g.connect(padGain);
-      o1.start(when); o2.start(when); o1.stop(when+dur+0.1); o2.stop(when+dur+0.1);
+      o1.connect(g); o2.connect(g); g.connect(padGain); o1.start(when); o2.start(when); o1.stop(when+dur+0.1); o2.stop(when+dur+0.1);
     }
     const roots=[57,53,60,55], arp=[0,7,12,7,0,7,12,14], stepDur=0.5;
-    function tick(){
-      if (!playing || !audio.enabled) return;
-      const t=now(); const bar=Math.floor(step/4); const root=roots[Math.floor(bar%roots.length)];
-      if (step%4===0){ playPad({freq:mtof(root),when:t+0.01}); playPad({freq:mtof(root+7),when:t+0.01,gain:0.08}); }
-      playNote({freq:mtof(root+arp[step%arp.length]),when:t+0.02,gain:0.18});
-      step++;
+    function tick(){ if(!playing||!audio.enabled) return; const t=now(), bar=Math.floor(step/4), root=roots[Math.floor(bar%roots.length)];
+      if(step%4===0){ playPad({freq:mtof(root),when:t+0.01}); playPad({freq:mtof(root+7),when:t+0.01,gain:0.08}); }
+      playNote({freq:mtof(root+arp[step%arp.length]),when:t+0.02,gain:0.18}); step++;
     }
-    function start(){ init(); if (playing) return; playing=true; tick(); timer=setInterval(()=>tick(), stepDur*1000); }
-    function stop(){ if (!playing) return; playing=false; if (timer){clearInterval(timer); timer=null;} }
+    function start(){ init(); if(playing) return; playing=true; tick(); timer=setInterval(tick, stepDur*1000); }
+    function stop(){ if(!playing) return; playing=false; if(timer){clearInterval(timer); timer=null;} }
     function setEnabled(on){ master && (master.gain.value = on?0.18:0.0); }
     return { start, stop, setEnabled };
   })();
-
-  function applyMuteUI(){
-    muteBtn.textContent = audio.enabled ? '🔊' : '🔇';
-    muteBtn.setAttribute('aria-pressed', String(!audio.enabled));
-    Music.setEnabled(audio.enabled);
-  }
+  function applyMuteUI(){ muteBtn.textContent = audio.enabled ? '🔊' : '🔇'; muteBtn.setAttribute('aria-pressed', String(!audio.enabled)); Music.setEnabled(audio.enabled); }
   applyMuteUI();
-  muteBtn.addEventListener('click', ()=>{
-    unlockAudio();
-    audio.enabled = !audio.enabled;
-    try{ localStorage.setItem(MUTE_KEY, String(!audio.enabled)); }catch(e){}
-    applyMuteUI();
-  });
+  muteBtn.addEventListener('click', ()=>{ unlockAudio(); audio.enabled=!audio.enabled; try{localStorage.setItem(MUTE_KEY,String(!audio.enabled));}catch(e){} applyMuteUI(); });
   ['pointerdown','keydown'].forEach(evt=>document.addEventListener(evt, unlockAudio, {once:true}));
 
-  /* ===== Leaderboard (local) ===== */
+  /* Leaderboard (local) */
   const LS_KEY = 'knightRunnerTopScores_v1';
   function loadScores(){ try{const raw=localStorage.getItem(LS_KEY);const a=raw?JSON.parse(raw):[];return Array.isArray(a)?a:[];}catch(e){ return []; } }
   function saveScores(arr){ try{ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }catch(e){} }
@@ -365,9 +312,11 @@ button,input{font-size:16px}
     const list = loadScores();
     list.push({ name:(name||'Player').trim(), score:+score, ts:Date.now() });
     list.sort((a,b)=> b.score - a.score || a.ts - b.ts);
-    const top10 = list.slice(0,10); saveScores(top10); return top10;
+    const capped = list.slice(0, 500); // keep storage sane
+    saveScores(capped);
+    return capped;
   }
-  function renderLeaderboard(){
+  function renderLeaderboard(myName=null, myScore=null){
     lbList.innerHTML='';
     const list = loadScores();
     if(list.length===0){
@@ -379,6 +328,7 @@ button,input{font-size:16px}
       const li=document.createElement('li');
       const name=document.createElement('div'); name.className='name'; name.textContent=`${i+1}. ${e.name}`;
       const sc=document.createElement('div'); sc.className='score'; sc.textContent=`${e.score.toFixed(1)}s`;
+      if (myName && myScore!=null && e.name===myName && Math.abs(e.score-myScore)<1e-6){ name.style.color='#2ecc71'; sc.style.color='#2ecc71'; }
       lbList.appendChild(li); lbList.appendChild(name); lbList.appendChild(sc);
     });
   }
@@ -386,28 +336,18 @@ button,input{font-size:16px}
   document.getElementById('resetScores').addEventListener('click', ()=>{
     if (confirm('Clear all saved scores on this device?')) {
       try{ localStorage.removeItem(LS_KEY); }catch(e){}
-      renderLeaderboard();
+      renderLeaderboard(); setBoardSize();
     }
   });
 
-  /* ===== Helpers ===== */
+  /* Game state & board */
   const clampCell = (n)=> Math.max(0, Math.min(SIZE-1, n|0));
-
-  /* ===== Game state ===== */
-  let running = true;
-  let speedMult = 1.0;
-  let slowFactor = 1.0;
-  let enemies = [];
-  let powerups = [];
-  let shield = 0;
-  let speedMoves = 0;
-  let slowUntil = 0;
-
+  let running = true, speedMult = 1.0, slowFactor = 1.0;
+  let enemies = [], powerups = [];
+  let shield = 0, speedMoves = 0, slowUntil = 0;
   let spawnTimer, difficultyTimer;
-  let startTime = performance.now();
-  let lastTime  = startTime;
+  let startTime = performance.now(), lastTime  = startTime;
 
-  /* ===== Build board ===== */
   for (let y=0;y<SIZE;y++){
     for (let x=0;x<SIZE;x++){
       const sq = document.createElement('div');
@@ -416,20 +356,16 @@ button,input{font-size:16px}
     }
   }
 
-  /* ===== Knight ===== */
+  /* Knight */
   let knight = { x:3, y:6 };
   const knightEl = document.createElement('div');
   knightEl.className = 'piece knight';
   knightEl.textContent = GLYPHS.knight;
   game.appendChild(knightEl);
-  function placeKnight(){
-    knight.x = clampCell(knight.x);
-    knight.y = clampCell(knight.y);
-    knightEl.style.left = (knight.x*CELL()) + 'px';
-    knightEl.style.top  = (knight.y*CELL()) + 'px';
-  }
+  function placeKnight(){ knight.x=clampCell(knight.x); knight.y=clampCell(knight.y);
+    knightEl.style.left=(knight.x*CELL())+'px'; knightEl.style.top=(knight.y*CELL())+'px'; }
 
-  /* ===== SVG Arrow Guide ===== */
+  /* Guide arrows */
   const svgNS = 'http://www.w3.org/2000/svg';
   const guide = document.createElementNS(svgNS, 'svg');
   guide.setAttribute('id', 'guideLayer');
@@ -444,11 +380,8 @@ button,input{font-size:16px}
   function clearGuide(){ while (guide.lastChild && guide.lastChild!==defs) guide.removeChild(guide.lastChild); }
   function drawFirstArrow(dir, invalid=false){
     clearGuide();
-    const cell = CELL();
-    const cx = knight.x*cell + cell/2;
-    const cy = knight.y*cell + cell/2;
-    const tx = knight.x + dir.x*2;
-    const ty = knight.y + dir.y*2;
+    const cell = CELL(), cx = knight.x*cell+cell/2, cy = knight.y*cell+cell/2;
+    const tx = knight.x + dir.x*2, ty = knight.y + dir.y*2;
     const inside = (tx>=0 && tx<SIZE && ty>=0 && ty<SIZE);
     const ex = Math.max(0, Math.min((SIZE-1)*cell, tx*cell + cell/2));
     const ey = Math.max(0, Math.min((SIZE-1)*cell, ty*cell + cell/2));
@@ -467,14 +400,11 @@ button,input{font-size:16px}
     label.textContent = bad ? 'out of bounds' : 'then choose ⟂';
     guide.appendChild(label);
     if (bad){ game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'), 220); return; }
-    const hints=[];
-    if (dir.x!==0){ hints.push({hx:tx,hy:ty+1}); hints.push({hx:tx,hy:ty-1}); }
-    else { hints.push({hx:tx+1,hy:ty}); hints.push({hx:tx-1,hy:ty}); }
+    const hints = dir.x!==0 ? [{hx:tx,hy:ty+1},{hx:tx,hy:ty-1}] : [{hx:tx+1,hy:ty},{hx:tx-1,hy:ty}];
     for (const h of hints){
       if (h.hx<0||h.hx>=SIZE||h.hy<0||h.hy>=SIZE) continue;
-      const hx = h.hx*cell + cell/2;
-      const hy = h.hy*cell + cell/2;
-      const line = document.createElementNS(svgNS,'line');
+      const hx=h.hx*cell+cell/2, hy=h.hy*cell+cell/2;
+      const line=document.createElementNS(svgNS,'line');
       line.setAttribute('x1', ex); line.setAttribute('y1', ey);
       line.setAttribute('x2', hx); line.setAttribute('y2', hy);
       line.setAttribute('class','ga-hint'); line.setAttribute('marker-end','url(#headHint)');
@@ -482,19 +412,16 @@ button,input{font-size:16px}
     }
   }
 
-  /* ===== Knight move dots (always visible) ===== */
-  const knightOffsets = [
-    {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
-    {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
-  ];
-  let dots = [];
+  /* Knight move dots */
+  const knightOffsets = [{x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},{x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}];
+  let dots=[];
   function updateDots(){
-    dots.forEach(d=>d.remove()); dots = [];
+    dots.forEach(d=>d.remove()); dots=[];
     if (!running) return;
     for (const o of knightOffsets){
-      const tx = knight.x + o.x, ty = knight.y + o.y;
+      const tx=knight.x+o.x, ty=knight.y+o.y;
       if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) continue;
-      const dot = document.createElement('div'); dot.className='dot';
+      const dot=document.createElement('div'); dot.className='dot';
       dot.style.left=(tx*CELL())+'px'; dot.style.top=(ty*CELL())+'px';
       const inner=document.createElement('span'); dot.appendChild(inner);
       dot.addEventListener('click', ()=> moveKnightTo(tx,ty));
@@ -502,7 +429,7 @@ button,input{font-size:16px}
     }
   }
 
-  /* ===== Power-ups ===== */
+  /* Power-ups, enemies, movement... (unchanged from k2) */
   const POWER_TYPES = ['shield','speed','slow','clear'];
   const POWER_GLYPH = { shield:'🛡', speed:'⚡', slow:'🕒', clear:'💥' };
   function spawnPowerUp(){
@@ -519,8 +446,7 @@ button,input{font-size:16px}
       game.appendChild(el);
       const expiresAt=performance.now()+5500;
       powerups.push({el,type,x,y,expiresAt});
-      SFX.spawnPower();
-      break;
+      SFX.spawnPower(); break;
     }
   }
   function pickupAt(x,y){
@@ -541,7 +467,7 @@ button,input{font-size:16px}
     if (type==='clear'){ enemies.forEach(e=>e.el.remove()); enemies=[]; SFX.pickupClear(); }
   }
   function sparkle(x,y){
-    const cell = CELL();
+    const cell=CELL();
     for(let i=0;i<6;i++){
       const s=document.createElement('div'); s.className='sparkle';
       s.style.left=(x*cell + cell*0.37 + Math.random()*cell*0.26)+'px';
@@ -551,8 +477,7 @@ button,input{font-size:16px}
     }
   }
 
-  /* ===== Enemies ===== */
-  const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 }; // cells/sec
+  const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 };
   function spawnEnemy(){
     const r=Math.random();
     let type = (r>0.85)?'queen' : (r>0.65)?'rook' : (r>0.40)?'bishop' : 'pawn';
@@ -568,255 +493,4 @@ button,input{font-size:16px}
     if (type==='bishop'){
       const dirX=(Math.random()<0.5)?-1:1;
       const e={el,type,px,py,bx:x,by:y,bdir:dirX,btx:x+dirX,bty:0,btpX:(x+dirX)*CELL(),btpY:0,stepSpeed:BASE_SPEED.bishop};
-      if (e.btx<0||e.btx>=SIZE){ e.bdir=-e.bdir; e.btx=e.bx+e.bdir; e.btpX=e.btx*CELL(); }
-      el.style.left=px+'px'; el.style.top=py+'px'; enemies.push(e); return;
-    }
-    let vxCells=0, vyCells=BASE_SPEED[type];
-    if (type==='rook'){ vxCells=0; vyCells=BASE_SPEED.rook; }
-    const e={el,type,px,py,vxCells,vyCells}; el.style.left=px+'px'; el.style.top=py+'px'; enemies.push(e);
-  }
-  function pickNextQueenTarget(e){
-    const cx=e.qx, cy=e.qy, ny=cy+1; const options=[];
-    for (let di=-1; di<=1; di++){ const nx=cx+di; if (nx>=0&&nx<SIZE) options.push(nx); }
-    const nx = options.length ? options[Math.floor(Math.random()*options.length)] : cx;
-    e.qtx=nx; e.qty=ny;
-  }
-  function pickNextBishopTarget(e){
-    const cx=e.bx, cy=e.by; let nx=cx+e.bdir; const ny=cy+1;
-    if (nx<0||nx>=SIZE){ e.bdir=-e.bdir; nx=cx+e.bdir; }
-    e.btx=nx; e.bty=ny;
-  }
-
-  /* ===== Difficulty / spawn ===== */
-  const baseSpawnDelay=1500;
-  function scheduleSpawn(){
-    const next=Math.max(60, baseSpawnDelay / (speedMult*(slowFactor||1)));
-    spawnTimer=setTimeout(function tick(){
-      if (!running) return;
-      (Math.random()<0.12 ? spawnPowerUp : spawnEnemy)();
-      scheduleSpawn();
-    }, next);
-  }
-  function scheduleDifficulty(){
-    difficultyTimer=setInterval(()=>{
-      if (!running) return;
-      speedMult += 0.4;
-      speedEl.textContent = (speedMult*(slowFactor||1)).toFixed(1)+'×';
-      clearTimeout(spawnTimer);
-      scheduleSpawn();
-    }, 6000);
-  }
-
-  /* ===== Movement & collision ===== */
-  function moveEnemiesSmooth(dt){
-    const dtSec=dt/1000, nowT=performance.now();
-    for (let i=powerups.length-1;i>=0;i--){
-      if (nowT>powerups[i].expiresAt){ powerups[i].el.classList.add('fade'); setTimeout(()=>powerups[i].el && powerups[i].el.remove(),450); powerups.splice(i,1); }
-    }
-    if (slowUntil && nowT>slowUntil){ slowUntil=0; slowFactor=1.0; bSlow.classList.remove('active'); }
-    speedEl.textContent = (speedMult*(slowFactor||1)).toFixed(1)+'×';
-    const mult=speedMult*(slowFactor||1);
-
-    for (let i=enemies.length-1;i>=0;i--){
-      const e=enemies[i];
-      if (e.type==='queen'){
-        const speedPx=e.stepSpeed*CELL()*mult;
-        const dx=e.qtpX-e.px, dy=e.qtpY-e.py;
-        const dist=Math.hypot(dx,dy); const step=speedPx*dtSec;
-        if (dist<=step || dist===0){
-          e.px=e.qtpX; e.py=e.qtpY; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
-          e.qx=e.qtx; e.qy=e.qty;
-          if (e.qy>=SIZE){ e.el.remove(); enemies.splice(i,1); continue; }
-          pickNextQueenTarget(e); e.qtpX=e.qtx*CELL(); e.qtpY=e.qty*CELL();
-        }else{
-          const ux=dx/dist, uy=dy/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
-        }
-      } else if (e.type==='bishop'){
-        const speedPx=e.stepSpeed*CELL()*mult;
-        const dx=e.btpX-e.px, dy=e.btpY-e.py; const dist=Math.hypot(dx,dy); const step=speedPx*dtSec;
-        if (dist<=step || dist===0){
-          e.px=e.btpX; e.py=e.btpY; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
-          e.bx=e.btx; e.by=e.bty;
-          if (e.by>=SIZE){ e.el.remove(); enemies.splice(i,1); continue; }
-          pickNextBishopTarget(e); e.btpX=e.btx*CELL(); e.btpY=e.bty*CELL();
-        }else{
-          const ux=dx/dist, uy=dy/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
-        }
-      } else {
-        const vx=(e.vxCells||0)*CELL()*mult, vy=(e.vyCells||0)*CELL()*mult;
-        e.px=Math.max(0, Math.min((SIZE-1)*CELL(), e.px + vx*dtSec));
-        e.py+=vy*dtSec;
-        e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
-      }
-
-      const ex=Math.round(e.px/CELL()), ey=Math.round(e.py/CELL());
-      if (ex===knight.x && ey===knight.y){
-        if (shield>0){ shield=0; bShield.classList.remove('active'); e.el.remove(); enemies.splice(i,1); game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'),220); SFX.shieldHit(); }
-        else { gameOver(); return; }
-      }
-      if (e.py>SIZE*CELL()){ e.el.remove(); enemies.splice(i,1); }
-    }
-
-    // danger glow
-    let danger=false;
-    const neigh = [{x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},{x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}];
-    for (let j=0;j<neigh.length;j++){
-      const o=neigh[j];
-      const tx=knight.x+o.x, ty=knight.y+o.y;
-      if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) continue;
-      if (enemies.some(e=>Math.round(e.px/CELL())===tx && Math.round(e.py/CELL())===ty)){ danger=true; break; }
-    }
-    knightEl.classList.toggle('danger', danger);
-  }
-  function checkCollision(){
-    const hit = enemies.some(e=>Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y);
-    if (hit){
-      if (shield>0){ shield=0; bShield.classList.remove('active'); enemies=enemies.filter(e=>!(Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y)); SFX.shieldHit(); }
-      else gameOver();
-    }
-  }
-
-  /* ===== Knight movement ===== */
-  function moveKnightTo(tx,ty){
-    if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) return;
-    knight.x = clampCell(tx);
-    knight.y = clampCell(ty);
-    placeKnight();
-    SFX.jump(); pickupAt(knight.x,knight.y); checkCollision(); updateDots(); clearGuide();
-    if (speedMoves>0){ speedMoves--; if (speedMoves===0) bSpeed.classList.remove('active'); }
-  }
-
-  /* ===== Loop ===== */
-  function loop(now){
-    if (!running) return;
-    const dt=now-lastTime; lastTime=now;
-    moveEnemiesSmooth(dt);
-    scoreEl.textContent=((now-startTime)/1000).toFixed(1);
-    requestAnimationFrame(loop);
-  }
-
-  /* ===== Arrow key two-step (first step must remain on board) ===== */
-  const DIRS = { up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
-  let arrowStep=0, firstArrow=null;
-  function processArrow(dir){
-    if (arrowStep===0){
-      const tx2=knight.x + dir.x*2, ty2=knight.y + dir.y*2;
-      const inside = (tx2>=0 && tx2<SIZE && ty2>=0 && ty2<SIZE);
-      if (!inside){ drawFirstArrow(dir, true); return; }
-      firstArrow=dir; arrowStep=1; drawFirstArrow(dir, false); return;
-    }
-    const dx2=firstArrow.x*2, dy2=firstArrow.y*2;
-    let tx=knight.x, ty=knight.y;
-    if (firstArrow.x!==0 && dir.y!==0){ tx+=dx2; ty+=dir.y; }
-    else if (firstArrow.y!==0 && dir.x!==0){ tx+=dir.x; ty+=dy2; }
-    else if (firstArrow.x===-dir.x && firstArrow.y===-dir.y){ arrowStep=0; firstArrow=null; clearGuide(); return; }
-    else { arrowStep=0; firstArrow=null; clearGuide(); return; }
-    if (tx<0||tx>=SIZE||ty<0||ty>=SIZE){ arrowStep=0; firstArrow=null; clearGuide(); return; }
-    arrowStep=0; firstArrow=null; clearGuide(); moveKnightTo(tx,ty);
-  }
-  document.addEventListener('keydown', (e)=>{
-    if (!running) return;
-    const k=e.key.replace('Arrow','').toLowerCase();
-    const dir=DIRS[k]; if (!dir) return;
-    e.preventDefault(); // stop page scroll on iOS
-    processArrow(dir);
-  });
-
-  /* ===== Game over / restart ===== */
-  function gameOver(){
-    if (!running) return;
-    running=false; clearTimeout(spawnTimer); clearInterval(difficultyTimer);
-    dots.forEach(d=>d.remove()); dots=[]; clearGuide();
-    game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'),350);
-    SFX.gameOver(); Music.stop();
-
-    const over=document.createElement('div'); over.id='over';
-    const finalScore=parseFloat(scoreEl.textContent)||0;
-    over.innerHTML=
-      '<h2>Game Over</h2>'+
-      '<p>You survived <strong>'+finalScore.toFixed(1)+'s</strong></p>'+
-      '<div id="saveRow">'+
-        '<input id="playerName" maxlength="16" placeholder="Your name">'+
-        '<button id="saveBtn">Save Score</button>'+
-      '</div>'+
-      '<button id="restart">Play Again</button>';
-    game.appendChild(over); over.style.display='flex';
-
-    const nameInput=over.querySelector('#playerName');
-    const saveBtn=over.querySelector('#saveBtn');
-    const restartBtn=over.querySelector('#restart');
-    const lastName=(function(){ try{return localStorage.getItem('knightRunner_lastName')||'';}catch(e){return '';} })();
-    if (lastName) nameInput.value=lastName;
-
-    saveBtn.addEventListener('click', ()=>{
-      const name=(nameInput.value||'Player').trim();
-      try{ localStorage.setItem('knightRunner_lastName', name); }catch(e){}
-      addScore(name, finalScore);
-      saveBtn.disabled=true; renderLeaderboard(name, finalScore);
-      setBoardSize();
-    });
-    restartBtn.addEventListener('click', restart);
-  }
-  function restart(){
-    enemies.forEach(e=>e.el.remove()); enemies=[];
-    powerups.forEach(p=>p.el && p.el.remove()); powerups=[];
-    const over=document.getElementById('over'); if (over) over.remove();
-    speedMult=1.0; slowFactor=1.0; slowUntil=0; shield=0; speedMoves=0;
-    bShield.classList.remove('active'); bSpeed.classList.remove('active'); bSlow.classList.remove('active');
-    speedEl.textContent='1.0×';
-    knight={x:3, y:6}; placeKnight();
-    startTime=performance.now(); lastTime=startTime;
-    arrowStep=0; firstArrow=null; clearGuide();
-    running=true; updateDots(); clearTimeout(spawnTimer); clearInterval(difficultyTimer);
-    scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
-    SFX.restart(); Music.start();
-  }
-
-  /* ===== Layout: align on size changes ===== */
-  function layoutAll(scaleFrom){
-    const cell = CELL();
-    const squares = document.querySelectorAll('.square');
-    squares.forEach((sq, i)=>{
-      const x=i%SIZE, y=(i/SIZE)|0;
-      sq.style.left=(x*cell)+'px'; sq.style.top=(y*cell)+'px';
-    });
-    placeKnight();
-    if (scaleFrom && scaleFrom>0){
-      const s = cell/scaleFrom;
-      enemies.forEach(e=>{
-        e.px*=s; e.py*=s; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
-        if (e.qtpX!=null){ e.qtpX*=s; e.qtpY*=s; }
-        if (e.btpX!=null){ e.btpX*=s; e.btpY*=s; }
-      });
-      powerups.forEach(p=>{
-        p.el.style.left=(p.x*cell)+'px';
-        p.el.style.top =(p.y*cell)+'px';
-      });
-      updateDots();
-    }
-    guide.setAttribute('viewBox', '0 0 ' + (cell*SIZE) + ' ' + (cell*SIZE));
-  }
-  let lastCell = CELL();
-  layoutAll();
-
-  if (window.ResizeObserver){
-    const ro = new ResizeObserver(()=>{
-      const newCell = CELL();
-      layoutAll(lastCell);
-      lastCell = newCell;
-    });
-    ro.observe(game);
-  }
-
-  const lb = document.getElementById('leaderboard');
-  if (window.MutationObserver && lb){
-    new MutationObserver(()=>setBoardSize()).observe(lb, {childList:true, subtree:true, attributes:true});
-  }
-
-  /* ===== Start ===== */
-  updateDots(); scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
-  applyMuteUI();
-})();
-</script>
-</body>
-</html>
+      if (e.btx<0||e.btx>=SIZE){ e.bdir=-e.bdir; e.btx=e
