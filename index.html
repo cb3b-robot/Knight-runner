@@ -5,39 +5,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Knight Runner</title>
 
-  <!-- Main CSS (GitHub Pages is case-sensitive; keep path/case exactly) -->
-  <link rel="stylesheet" href="style.css?v=1">
+  <!-- Main CSS (path/case must match exactly on GitHub Pages) -->
+  <link rel="stylesheet" href="style.css?v=fit-ipad-2">
 
-  <!-- Optional: tiny fallback so the board frame is visible even if CSS fails -->
+  <!-- Minimal fallback so board is visible/usable even if CSS fails -->
   <style id="board-fallback">
     :root{ --board:min(92vmin,92svmin); --cell:calc(var(--board)/8); }
-    #game{
-      position:relative; width:var(--board); height:var(--board);
-      border:4px solid #fff; border-radius:12px; overflow:hidden; background:#222;
-    }
+    body{ margin:0; background:#111; color:#fff; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; display:flex; flex-direction:column; align-items:center; gap:10px; padding: env(safe-area-inset-top) 10px env(safe-area-inset-bottom); }
+    .hud{ display:flex; gap:10px; align-items:center; justify-content:center; flex-wrap:wrap; }
+    .pill{ padding:6px 10px; border-radius:999px; background:#222; border:1px solid #333; }
+    #game{ position:relative; width:var(--board); height:var(--board); border:4px solid #fff; border-radius:12px; overflow:hidden; background:#222; }
     .square{ position:absolute; width:var(--cell); height:var(--cell); }
     .light{ background:#f0d9b5; } .dark{ background:#b58863; }
   </style>
 
-  <!-- Lightweight styles for the error overlay (so blank pages show what's wrong) -->
+  <!-- Error overlay so blank pages show what's wrong -->
   <style>
-    #errorOverlay {
-      position: fixed; inset: 0; display: none;
-      background: #1b1b1bcc; color: #fff; z-index: 99999;
-      align-items: flex-start; justify-content: center; padding: 16px; overflow: auto;
-    }
-    #errorOverlay pre {
-      max-width: 900px; width: 100%;
-      background: #2a2a2a; border: 1px solid #ff6b6b; border-radius: 10px;
-      padding: 12px; white-space: pre-wrap; word-break: break-word;
-    }
+    #errorOverlay{ position:fixed; inset:0; display:none; background:#1b1b1bcc; color:#fff; z-index:99999; align-items:flex-start; justify-content:center; padding:16px; overflow:auto }
+    #errorOverlay pre{ max-width:900px; width:100%; background:#2a2a2a; border:1px solid #ff6b6b; border-radius:10px; padding:12px; white-space:pre-wrap; word-break:break-word }
   </style>
 </head>
 <body>
   <h1>Knight Runner</h1>
 
   <!-- HUD -->
-  <div class="hud">
+  <div class="hud" id="hud">
     <div class="pill">Score: <span id="score">0.0</span>s</div>
     <div class="pill">Speed: <span id="speed">1.0×</span></div>
     <div id="status">
@@ -85,8 +77,57 @@
     })();
   </script>
 
-  <!-- Modern browsers: ES module entry (imports the rest of your JS) -->
-  <script type="module" src="./js/main.js?v=1"></script>
+  <!-- iPad/iPhone fit script (works even if main.js fails) -->
+  <script>
+    (function(){
+      const root = document.documentElement;
+      const game = document.getElementById('game');
+      const hud  = document.getElementById('hud');
+
+      function safeVH(){
+        // Prefer visualViewport where available (iOS Safari)
+        return (window.visualViewport && window.visualViewport.height) || window.innerHeight || document.documentElement.clientHeight || 600;
+      }
+      function safeVW(){
+        return (window.visualViewport && window.visualViewport.width) || window.innerWidth || document.documentElement.clientWidth || 600;
+      }
+      function hudH(){
+        return hud ? Math.ceil(hud.getBoundingClientRect().height) : 0;
+      }
+
+      function fitBoard(){
+        const pad = 16; // breathing room below HUD
+        const vh  = safeVH();
+        const vw  = safeVW();
+        const h   = hudH();
+        // Board must fit in remaining height and width
+        const byHeight = Math.max(240, Math.floor(vh - h - pad - (window.safeAreaInsetBottom||0)));
+        const byWidth  = Math.max(240, Math.floor(vw - 16)); // 8px margins either side
+        const size     = Math.min(byHeight, byWidth);
+
+        root.style.setProperty('--board', size + 'px');
+        root.style.setProperty('--cell', (size/8) + 'px');
+
+        // Also set explicit size on #game in case external CSS fails
+        game.style.width  = size + 'px';
+        game.style.height = size + 'px';
+      }
+
+      // iOS-specific: respond to browser chrome show/hide
+      if (window.visualViewport){
+        visualViewport.addEventListener('resize', fitBoard);
+        visualViewport.addEventListener('scroll', fitBoard);
+      }
+      window.addEventListener('resize', fitBoard, {passive:true});
+      window.addEventListener('orientationchange', ()=>setTimeout(fitBoard, 120), {passive:true});
+
+      // First run + a couple delayed runs to catch font/layout shifts
+      fitBoard(); setTimeout(fitBoard, 150); setTimeout(fitBoard, 600);
+    })();
+  </script>
+
+  <!-- Modern browsers: ES module entry -->
+  <script type="module" src="./js/main.js?v=fit-ipad-2"></script>
 
   <!-- Old browsers: friendly message instead of failing silently -->
   <script nomodule>
@@ -101,15 +142,17 @@
     })();
   </script>
 
-  <!-- Remove the fallback CSS if the real stylesheet loaded (prevents duplicate rules) -->
+  <!-- Remove the fallback CSS only if the real stylesheet loaded -->
   <script>
-    (function(){
-      const computed = getComputedStyle(document.documentElement).getPropertyValue('--board');
-      if (computed && computed.trim() !== '') {
+    window.addEventListener('load', () => {
+      const flag = getComputedStyle(document.documentElement)
+        .getPropertyValue('--css-loaded')
+        .replace(/["']/g,'').trim();
+      if (flag === 'yes') {
         const fb = document.getElementById('board-fallback');
         if (fb) fb.remove();
       }
-    })();
+    });
   </script>
 </body>
 </html>
