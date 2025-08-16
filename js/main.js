@@ -1,4 +1,7 @@
 // js/main.js — Knight Runner (single-file build; no imports needed)
+// Includes inline board sizing so the chessboard appears even if CSS is missing.
+// Fixes "unexpected '=' after dur" by avoiding default destructuring params.
+
 'use strict';
 window.__MAIN_LOADED__ = true;
 console.log('[Knight Runner] main.js loaded');
@@ -36,7 +39,6 @@ function CELL(){
   return Math.min(window.innerWidth||600, (window.innerHeight||600)-HUD_HEIGHT()) * 0.92 / SIZE;
 }
 function setBoardVars(){
-  // Keep CSS vars updated (used by some transitions)
   const c = CELL();
   const size = c * SIZE;
   root.style.setProperty('--board', size + 'px');
@@ -78,19 +80,39 @@ function unlockAudio(){
   audio.unlocked = true; Music.start();
 }
 function now(){ ensureAudio(); return audio.ctx.currentTime; }
-function tone({freq=440, type='sine', dur=0.12, gain=0.05, attack=0.002, release=0.08, slideTo=null, slideTime=0.08}){
+
+// ✅ FIXED: no default params in destructuring — use an opts object with inside defaults
+function tone(opts){
   if (!audio.enabled) return;
+  opts = opts || {};
+  const freq      = (opts.freq != null) ? opts.freq : 440;
+  const type      = (opts.type || 'sine');
+  const dur       = (opts.dur  != null) ? opts.dur  : 0.12;
+  const gainVal   = (opts.gain != null) ? opts.gain : 0.05;
+  const attack    = (opts.attack  != null) ? opts.attack  : 0.002;
+  const release   = (opts.release != null) ? opts.release : 0.08;
+  const slideTo   = (opts.slideTo != null) ? opts.slideTo : null;
+  const slideTime = (opts.slideTime != null) ? opts.slideTime : 0.08;
+
   ensureAudio();
   const t0 = now();
   const osc = audio.ctx.createOscillator();
   const g = audio.ctx.createGain();
   const f = audio.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=8000;
-  osc.type=type; osc.frequency.value=freq;
+
+  osc.type = type; osc.frequency.value=freq;
+
   g.gain.setValueAtTime(0, t0);
-  g.gain.linearRampToValueAtTime(gain, t0+attack);
-  if (slideTo!=null){ osc.frequency.setValueAtTime(freq, t0); osc.frequency.linearRampToValueAtTime(slideTo, t0+slideTime); }
-  g.gain.setValueAtTime(gain, t0+dur);
+  g.gain.linearRampToValueAtTime(gainVal, t0+attack);
+
+  if (slideTo != null){
+    osc.frequency.setValueAtTime(freq, t0);
+    osc.frequency.linearRampToValueAtTime(slideTo, t0+slideTime);
+  }
+
+  g.gain.setValueAtTime(gainVal, t0+dur);
   g.gain.linearRampToValueAtTime(0.0001, t0+dur+release);
+
   osc.connect(f); f.connect(g); g.connect(audio.ctx.destination);
   osc.start(t0); osc.stop(t0+dur+release+0.02);
 }
@@ -105,6 +127,8 @@ const SFX = {
   gameOver(){ tone({freq:440,type:'sawtooth',gain:0.06,attack:0.004,release:0.25, slideTo:180, slideTime:0.25}); },
   restart(){ tone({freq:660,type:'triangle',gain:0.05,attack:0.003,release:0.12, slideTo:880, slideTime:0.08}); }
 };
+
+// ✅ FIXED: playNote/ playPad also avoid destructuring defaults
 const Music = (() => {
   let master, padGain, arpGain, delay, feedback, lowpass, timer=null, step=0, playing=false;
   function init(){
@@ -121,30 +145,49 @@ const Music = (() => {
     delay.connect(master); lowpass.connect(master); master.connect(audio.ctx.destination);
   }
   function mtof(n){ return 440*Math.pow(2,(n-69)/12); }
-  function playNote({freq,when,dur=0.22,type='triangle',gain=0.18,target=arpGain}){
+
+  function playNote(opts){
     if (!audio.enabled) return;
+    opts = opts || {};
+    const freq   = opts.freq;
+    const when   = (opts.when != null) ? opts.when : now();
+    const dur    = (opts.dur  != null) ? opts.dur  : 0.22;
+    const type   = opts.type || 'triangle';
+    const gainV  = (opts.gain != null) ? opts.gain : 0.18;
+    const target = opts.target || arpGain;
+
     const osc=audio.ctx.createOscillator(), g=audio.ctx.createGain();
     osc.type=type; osc.frequency.value=freq;
     g.gain.setValueAtTime(0.0001,when);
-    g.gain.linearRampToValueAtTime(gain,when+0.01);
+    g.gain.linearRampToValueAtTime(gainV,when+0.01);
     g.gain.exponentialRampToValueAtTime(0.0001,when+dur);
     osc.connect(g); g.connect(target); osc.start(when); osc.stop(when+dur+0.02);
   }
-  function playPad({freq,when,dur=3.8,gain=0.10}){
+
+  function playPad(opts){
     if (!audio.enabled) return;
+    opts = opts || {};
+    const freq = opts.freq;
+    const when = (opts.when != null) ? opts.when : now();
+    const dur  = (opts.dur  != null) ? opts.dur  : 3.8;
+    const gAmt = (opts.gain != null) ? opts.gain : 0.10;
+
     const o1=audio.ctx.createOscillator(), o2=audio.ctx.createOscillator(), g=audio.ctx.createGain();
-    o1.type='sine'; o2.type='sine'; o1.frequency.value=freq; o2.frequency.value=freq*2**(7/1200);
-    g.gain.setValueAtTime(0.0001,when); g.gain.linearRampToValueAtTime(gain,when+0.8); g.gain.linearRampToValueAtTime(0.0001,when+dur);
+    o1.type='sine'; o2.type='sine'; o1.frequency.value=freq; o2.frequency.value=freq*Math.pow(2, 7/1200);
+    g.gain.setValueAtTime(0.0001,when);
+    g.gain.linearRampToValueAtTime(gAmt,when+0.8);
+    g.gain.linearRampToValueAtTime(0.0001,when+dur);
     o1.connect(g); o2.connect(g); g.connect(padGain);
     o1.start(when); o2.start(when); o1.stop(when+dur+0.1); o2.stop(when+dur+0.1);
   }
+
   const roots=[57,53,60,55]; const arpPattern=[0,7,12,7,0,7,12,14]; const stepDur=0.5;
   function tick(){
     if (!playing || !audio.enabled) return;
     const t=now(); const bar=Math.floor(step/4); const root=roots[Math.floor(bar%roots.length)];
-    if (step%4===0){ playPad({freq:mtof(root),when:t+0.01,dur=3.8}); playPad({freq:mtof(root+7),when:t+0.01,dur=3.8,gain=0.08}); }
+    if (step%4===0){ playPad({freq:mtof(root),when:t+0.01,dur:3.8}); playPad({freq:mtof(root+7),when:t+0.01,dur:3.8,gain:0.08}); }
     const intv=arpPattern[step%arpPattern.length];
-    playNote({freq:mtof(root+intv),when:t+0.02,dur=0.24,type:'triangle',gain=0.18});
+    playNote({freq:mtof(root+intv),when:t+0.02,dur:0.24,type:'triangle',gain:0.18});
     step++;
   }
   function start(){ init(); if (playing) return; playing=true; tick(); timer=setInterval(()=>tick(), stepDur*1000); }
@@ -236,7 +279,7 @@ function buildBoard(){
 }
 
 /* ===================== Knight, Dots & Guide ===================== */
-const GLYPHS = { knight:'\u2658\uFE0E', pawn:'\u265F\uFE0E', rook:'\u265C\uFE0E', bishop:'\u265D\uFE0E', queen:'\u265B\uFE0E' }; // ♘ ♟ ♜ ♝ ♛ (force text)
+const GLYPHS = { knight:'\u2658\uFE0E', pawn:'\u265F\uFE0E', rook:'\u265C\uFE0E', bishop:'\u265D\uFE0E', queen:'\u265B\uFE0E' }; // ♘ ♟ ♜ ♝ ♛
 let state = {
   running: true,
   startTime: performance.now(),
