@@ -1,9 +1,8 @@
-// js/main.js — Knight Runner (single-file build; no imports needed)
-// Renders the board/pieces even without CSS (inline sizing/styles)
-// Fixes "unexpected '=' after dur" by avoiding destructured defaults.
+// js/main.js — Knight Runner (single-file build; no imports)
+// Renders board/pieces even without CSS (inline sizing/styles).
+// Avoids "unexpected '=' after dur" by not using destructured defaults.
 
 'use strict';
-console.log('[Knight Runner] main.js loaded');
 
 /* ===================== DOM refs ===================== */
 const els = {
@@ -24,22 +23,16 @@ const root = document.documentElement;
 const SIZE = 8;
 
 /* ===================== Cell size helpers ===================== */
-function HUD_HEIGHT(){
-  return els.hud ? els.hud.getBoundingClientRect().height : 0;
-}
+function HUD_HEIGHT(){ return els.hud ? els.hud.getBoundingClientRect().height : 0; }
 function CELL(){
-  // 1) Try CSS var
   const v = parseFloat(getComputedStyle(root).getPropertyValue('--cell'));
   if (!isNaN(v) && v > 0) return v;
-  // 2) Try game rect
   const r = els.game.getBoundingClientRect();
   if (r.width && r.height) return Math.min(r.width, r.height) / SIZE;
-  // 3) Fallback to viewport
   return Math.min(window.innerWidth||600, (window.innerHeight||600)-HUD_HEIGHT()) * 0.92 / SIZE;
 }
 function setBoardVars(){
-  const c = CELL();
-  const size = c * SIZE;
+  const c = CELL(); const size = c*SIZE;
   root.style.setProperty('--board', size + 'px');
   root.style.setProperty('--cell', c + 'px');
 }
@@ -55,13 +48,12 @@ function installSizing(){
     root.style.setProperty('--cell', (size / SIZE) + 'px');
   }
   window.addEventListener('resize', setBoardSize, {passive:true});
-  window.addEventListener('orientationchange', () => setTimeout(setBoardSize, 120), {passive:true});
-  // seed if CSS missing
+  window.addEventListener('orientationchange', ()=>setTimeout(setBoardSize,120), {passive:true});
   if (!getComputedStyle(root).getPropertyValue('--board').trim()){
     root.style.setProperty('--board', '92vmin');
     root.style.setProperty('--cell', `calc(92vmin / ${SIZE})`);
   }
-  setBoardSize(); setTimeout(setBoardSize, 200); setTimeout(setBoardSize, 800);
+  setBoardSize(); setTimeout(setBoardSize,200); setTimeout(setBoardSize,800);
 }
 
 /* ===================== Audio (SFX + music) ===================== */
@@ -79,12 +71,12 @@ function unlockAudio(){
 }
 function now(){ ensureAudio(); return audio.ctx.currentTime; }
 
-// ✅ No destructured defaults — older engines safe.
+// No destructured defaults (older engines safe)
 function tone(opts){
   if (!audio.enabled) return;
   opts = opts || {};
   const freq      = (opts.freq != null) ? opts.freq : 440;
-  const type      = (opts.type || 'sine');
+  const type      = opts.type || 'sine';
   const dur       = (opts.dur  != null) ? opts.dur  : 0.12;
   const gainVal   = (opts.gain != null) ? opts.gain : 0.05;
   const attack    = (opts.attack  != null) ? opts.attack  : 0.002;
@@ -99,15 +91,12 @@ function tone(opts){
   const f = audio.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=8000;
 
   osc.type = type; osc.frequency.value=freq;
-
   g.gain.setValueAtTime(0, t0);
   g.gain.linearRampToValueAtTime(gainVal, t0+attack);
-
   if (slideTo != null){
     osc.frequency.setValueAtTime(freq, t0);
     osc.frequency.linearRampToValueAtTime(slideTo, t0+slideTime);
   }
-
   g.gain.setValueAtTime(gainVal, t0+dur);
   g.gain.linearRampToValueAtTime(0.0001, t0+dur+release);
 
@@ -142,7 +131,6 @@ const Music = (() => {
     delay.connect(master); lowpass.connect(master); master.connect(audio.ctx.destination);
   }
   function mtof(n){ return 440*Math.pow(2,(n-69)/12); }
-
   function playNote(opts){
     if (!audio.enabled) return;
     opts = opts || {};
@@ -152,7 +140,6 @@ const Music = (() => {
     const type   = opts.type || 'triangle';
     const gainV  = (opts.gain != null) ? opts.gain : 0.18;
     const target = opts.target || arpGain;
-
     const osc=audio.ctx.createOscillator(), g=audio.ctx.createGain();
     osc.type=type; osc.frequency.value=freq;
     g.gain.setValueAtTime(0.0001,when);
@@ -160,7 +147,6 @@ const Music = (() => {
     g.gain.exponentialRampToValueAtTime(0.0001,when+dur);
     osc.connect(g); g.connect(target); osc.start(when); osc.stop(when+dur+0.02);
   }
-
   function playPad(opts){
     if (!audio.enabled) return;
     opts = opts || {};
@@ -168,7 +154,6 @@ const Music = (() => {
     const when = (opts.when != null) ? opts.when : now();
     const dur  = (opts.dur  != null) ? opts.dur  : 3.8;
     const gAmt = (opts.gain != null) ? opts.gain : 0.10;
-
     const o1=audio.ctx.createOscillator(), o2=audio.ctx.createOscillator(), g=audio.ctx.createGain();
     o1.type='sine'; o2.type='sine'; o1.frequency.value=freq; o2.frequency.value=freq*Math.pow(2, 7/1200);
     g.gain.setValueAtTime(0.0001,when);
@@ -177,7 +162,6 @@ const Music = (() => {
     o1.connect(g); o2.connect(g); g.connect(padGain);
     o1.start(when); o2.start(when); o1.stop(when+dur+0.1); o2.stop(when+dur+0.1);
   }
-
   const roots=[57,53,60,55]; const arpPattern=[0,7,12,7,0,7,12,14]; const stepDur=0.5;
   function tick(){
     if (!playing || !audio.enabled) return;
@@ -245,40 +229,37 @@ if (els.resetScores){
   });
 }
 
-/* ===================== Build chessboard (inline sizes!) ===================== */
+/* ===================== Build chessboard (SAFE: only squares) ===================== */
 function buildBoard(){
-  const cell = CELL();
-  const size = cell * SIZE;
-
-  // Ensure the game area has size, even if CSS failed
+  const cell = CELL(); const size = cell * SIZE;
   els.game.style.position = 'relative';
   els.game.style.width  = size + 'px';
   els.game.style.height = size + 'px';
 
-  els.game.innerHTML = '';
+  // Remove ONLY existing squares (keep knight, enemies, dots, guide)
+  els.game.querySelectorAll('.square').forEach(n => n.remove());
 
+  // Rebuild squares
   for (let y = 0; y < SIZE; y++){
     for (let x = 0; x < SIZE; x++){
       const sq = document.createElement('div');
       sq.className = 'square ' + ((x + y) % 2 ? 'dark' : 'light');
-
-      // Absolute placement + explicit size + background colors
-      sq.style.position = 'absolute';
-      sq.style.left   = (x * cell) + 'px';
-      sq.style.top    = (y * cell) + 'px';
-      sq.style.width  = cell + 'px';
-      sq.style.height = cell + 'px';
-      sq.style.background = ((x + y) % 2 ? '#b58863' : '#f0d9b5');
-
+      Object.assign(sq.style, {
+        position: 'absolute',
+        left: (x * cell) + 'px',
+        top:  (y * cell) + 'px',
+        width: cell + 'px',
+        height: cell + 'px',
+        background: ((x + y) % 2 ? '#b58863' : '#f0d9b5')
+      });
       els.game.appendChild(sq);
     }
   }
 }
 
 /* ===================== Knight, Dots & Guide ===================== */
-/* Use black Knight glyph (♞) colored white so it's "filled". */
 const GLYPHS = {
-  knight:'\u265E\uFE0E', // ♞
+  knight:'\u265E\uFE0E', // ♞ (rendered white via CSS/inline color)
   pawn:'\u265F\uFE0E',   // ♟
   rook:'\u265C\uFE0E',   // ♜
   bishop:'\u265D\uFE0E', // ♝
@@ -298,10 +279,16 @@ let state = {
   knight: { x:3, y:6 },
   timers: {}
 };
-const knightEl = document.createElement('div');
-knightEl.className = 'piece knight';
-knightEl.textContent = GLYPHS.knight;
-els.game.appendChild(knightEl);
+
+let knightEl = null;
+function ensureKnightEl(){
+  if (knightEl && knightEl.isConnected) return knightEl;
+  knightEl = document.createElement('div');
+  knightEl.className = 'piece knight';
+  knightEl.textContent = GLYPHS.knight;
+  els.game.appendChild(knightEl);
+  return knightEl;
+}
 function styleKnightInline(){
   const c = CELL();
   Object.assign(knightEl.style, {
@@ -320,8 +307,9 @@ function styleKnightInline(){
   });
 }
 function placeKnight(){
-  const c = CELL();
+  ensureKnightEl();
   styleKnightInline();
+  const c = CELL();
   knightEl.style.left = (state.knight.x*c)+'px';
   knightEl.style.top  = (state.knight.y*c)+'px';
 }
@@ -576,7 +564,7 @@ function stepEnemies(dt){
     if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) continue;
     if (state.enemies.some(e=>Math.round(e.px/cell)===tx && Math.round(e.py/cell)===ty)){ danger=true; break; }
   }
-  knightEl.classList.toggle('danger', danger);
+  if (knightEl) knightEl.classList.toggle('danger', danger);
 }
 
 /* ===================== Knight movement ===================== */
@@ -719,30 +707,21 @@ function restart(){
   state.running=true; updateDots(); clearTimeout(state.timers.spawn); clearInterval(state.timers.diff);
   scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
   SFX.restart();
-  // Start music if already unlocked
   if (audio.ctx && audio.ctx.state === 'running') Music.start();
 }
 
-/* ===================== Relayout on resize (keep squares visible) ===================== */
+/* ===================== Relayout on resize ===================== */
 function relayoutAll(){
-  const cell = CELL();
-  const size = cell * SIZE;
-
-  // Board size
+  const cell = CELL(); const size = cell * SIZE;
   els.game.style.width  = size + 'px';
   els.game.style.height = size + 'px';
-
-  // Squares positions + sizes
-  const squares = els.game.querySelectorAll('.square');
-  squares.forEach((sq, i) => {
+  els.game.querySelectorAll('.square').forEach((sq, i) => {
     const x = i % SIZE, y = (i / SIZE) | 0;
     sq.style.left   = (x * cell) + 'px';
     sq.style.top    = (y * cell) + 'px';
     sq.style.width  = cell + 'px';
     sq.style.height = cell + 'px';
   });
-
-  // Pieces & overlays
   placeKnight();
   setGuideViewBox();
   updateDots();
@@ -764,14 +743,15 @@ function loop(now){
 (function start(){
   installSizing();
   setBoardVars();
-  buildBoard();
-  placeKnight();
+  buildBoard();     // build squares first
+  placeKnight();    // then ensure knight is attached and visible
   updateDots();
+  // spawnEnemy();  // (optional) uncomment to spawn one immediately for visibility
   scheduleSpawn();
   scheduleDifficulty();
   requestAnimationFrame(t=>{ state.lastTime=t; requestAnimationFrame(loop); });
 
-  // Only start music if context is running; otherwise first tap/keypress triggers it.
+  // Only start music if context is running; otherwise first tap/keypress unlocks.
   if (audio.ctx && audio.ctx.state === 'running') {
     Music.start();
   }
