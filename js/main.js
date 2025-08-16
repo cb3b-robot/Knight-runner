@@ -1,10 +1,11 @@
-// js/main.js — Knight Runner (single-file build; no imports)
-// Renders board/pieces even without CSS (inline sizing/styles).
-// Avoids "unexpected '=' after dur" by not using destructured defaults.
+// js/main.js — Knight Runner (layers build)
+// Uses separate DOM layers so squares rebuild won't remove pieces.
+// Renders board/pieces even without CSS (inline sizing).
+// Audio uses Web Audio and starts after first user interaction.
 
 'use strict';
 
-/* ===================== DOM refs ===================== */
+/* ============== DOM refs ============== */
 const els = {
   game: document.getElementById('game'),
   score: document.getElementById('score'),
@@ -22,7 +23,32 @@ const els = {
 const root = document.documentElement;
 const SIZE = 8;
 
-/* ===================== Cell size helpers ===================== */
+/* ============== Layers ============== */
+const layers = { squares:null, pieces:null, ui:null };
+function ensureLayers(){
+  // host size / positioning
+  els.game.style.position = 'relative';
+  if (!layers.squares){
+    layers.squares = document.createElement('div');
+    layers.squares.id = 'layer-squares';
+    Object.assign(layers.squares.style, {position:'absolute', inset:'0', zIndex:'0'});
+    els.game.appendChild(layers.squares);
+  }
+  if (!layers.pieces){
+    layers.pieces = document.createElement('div');
+    layers.pieces.id = 'layer-pieces';
+    Object.assign(layers.pieces.style, {position:'absolute', inset:'0', zIndex:'100', pointerEvents:'none'});
+    els.game.appendChild(layers.pieces);
+  }
+  if (!layers.ui){
+    layers.ui = document.createElement('div');
+    layers.ui.id = 'layer-ui';
+    Object.assign(layers.ui.style, {position:'absolute', inset:'0', zIndex:'140'});
+    els.game.appendChild(layers.ui);
+  }
+}
+
+/* ============== Size helpers ============== */
 function HUD_HEIGHT(){ return els.hud ? els.hud.getBoundingClientRect().height : 0; }
 function CELL(){
   const v = parseFloat(getComputedStyle(root).getPropertyValue('--cell'));
@@ -32,12 +58,10 @@ function CELL(){
   return Math.min(window.innerWidth||600, (window.innerHeight||600)-HUD_HEIGHT()) * 0.92 / SIZE;
 }
 function setBoardVars(){
-  const c = CELL(); const size = c*SIZE;
+  const c = CELL(); const size = c * SIZE;
   root.style.setProperty('--board', size + 'px');
   root.style.setProperty('--cell', c + 'px');
 }
-
-/* ===================== Responsive sizing ===================== */
 function installSizing(){
   function setBoardSize(){
     const vh = window.innerHeight || document.documentElement.clientHeight;
@@ -46,6 +70,8 @@ function installSizing(){
     const size = Math.floor(Math.min(Math.max(260, vh - hudH - 24), Math.max(260, vw - 16)));
     root.style.setProperty('--board', size + 'px');
     root.style.setProperty('--cell', (size / SIZE) + 'px');
+    els.game.style.width  = size + 'px';
+    els.game.style.height = size + 'px';
   }
   window.addEventListener('resize', setBoardSize, {passive:true});
   window.addEventListener('orientationchange', ()=>setTimeout(setBoardSize,120), {passive:true});
@@ -56,7 +82,7 @@ function installSizing(){
   setBoardSize(); setTimeout(setBoardSize,200); setTimeout(setBoardSize,800);
 }
 
-/* ===================== Audio (SFX + music) ===================== */
+/* ============== Audio ============== */
 const MUTE_KEY = 'KR_mute';
 let audio = { ctx:null, enabled:true, unlocked:false };
 try{ audio.enabled = localStorage.getItem(MUTE_KEY)!=='true'; }catch{}
@@ -70,8 +96,6 @@ function unlockAudio(){
   audio.unlocked = true; Music.start();
 }
 function now(){ ensureAudio(); return audio.ctx.currentTime; }
-
-// No destructured defaults (older engines safe)
 function tone(opts){
   if (!audio.enabled) return;
   opts = opts || {};
@@ -114,7 +138,6 @@ const SFX = {
   gameOver(){ tone({freq:440,type:'sawtooth',gain:0.06,attack:0.004,release:0.25, slideTo:180, slideTime:0.25}); },
   restart(){ tone({freq:660,type:'triangle',gain:0.05,attack:0.003,release:0.12, slideTo:880, slideTime:0.08}); }
 };
-
 const Music = (() => {
   let master, padGain, arpGain, delay, feedback, lowpass, timer=null, step=0, playing=false;
   function init(){
@@ -131,50 +154,29 @@ const Music = (() => {
     delay.connect(master); lowpass.connect(master); master.connect(audio.ctx.destination);
   }
   function mtof(n){ return 440*Math.pow(2,(n-69)/12); }
-  function playNote(opts){
-    if (!audio.enabled) return;
-    opts = opts || {};
-    const freq   = opts.freq;
-    const when   = (opts.when != null) ? opts.when : now();
-    const dur    = (opts.dur  != null) ? opts.dur  : 0.22;
-    const type   = opts.type || 'triangle';
-    const gainV  = (opts.gain != null) ? opts.gain : 0.18;
-    const target = opts.target || arpGain;
-    const osc=audio.ctx.createOscillator(), g=audio.ctx.createGain();
-    osc.type=type; osc.frequency.value=freq;
-    g.gain.setValueAtTime(0.0001,when);
-    g.gain.linearRampToValueAtTime(gainV,when+0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001,when+dur);
-    osc.connect(g); g.connect(target); osc.start(when); osc.stop(when+dur+0.02);
+  function playNote(o){ if (!audio.enabled) return;
+    o=o||{}; const t=(o.when!=null)?o.when:now(), d=(o.dur!=null)?o.dur:0.22, g=(o.gain!=null)?o.gain:0.18, ty=o.type||'triangle';
+    const osc=audio.ctx.createOscillator(), gg=audio.ctx.createGain();
+    osc.type=ty; osc.frequency.value=o.freq; gg.gain.setValueAtTime(0.0001,t);
+    gg.gain.linearRampToValueAtTime(g,t+0.01); gg.gain.exponentialRampToValueAtTime(0.0001,t+d);
+    osc.connect(gg); gg.connect(padGain); osc.start(t); osc.stop(t+d+0.02);
   }
-  function playPad(opts){
-    if (!audio.enabled) return;
-    opts = opts || {};
-    const freq = opts.freq;
-    const when = (opts.when != null) ? opts.when : now();
-    const dur  = (opts.dur  != null) ? opts.dur  : 3.8;
-    const gAmt = (opts.gain != null) ? opts.gain : 0.10;
-    const o1=audio.ctx.createOscillator(), o2=audio.ctx.createOscillator(), g=audio.ctx.createGain();
-    o1.type='sine'; o2.type='sine'; o1.frequency.value=freq; o2.frequency.value=freq*Math.pow(2, 7/1200);
-    g.gain.setValueAtTime(0.0001,when);
-    g.gain.linearRampToValueAtTime(gAmt,when+0.8);
-    g.gain.linearRampToValueAtTime(0.0001,when+dur);
-    o1.connect(g); o2.connect(g); g.connect(padGain);
-    o1.start(when); o2.start(when); o1.stop(when+dur+0.1); o2.stop(when+dur+0.1);
+  function playPad(o){ if (!audio.enabled) return;
+    o=o||{}; const f=o.freq, t=(o.when!=null)?o.when:now(), d=(o.dur!=null)?o.dur:3.8, g=(o.gain!=null)?o.gain:0.10;
+    const o1=audio.ctx.createOscillator(), o2=audio.ctx.createOscillator(), gg=audio.ctx.createGain();
+    o1.type='sine'; o2.type='sine'; o1.frequency.value=f; o2.frequency.value=f*Math.pow(2,7/1200);
+    gg.gain.setValueAtTime(0.0001,t); gg.gain.linearRampToValueAtTime(g,t+0.8); gg.gain.linearRampToValueAtTime(0.0001,t+d);
+    o1.connect(gg); o2.connect(gg); gg.connect(padGain); o1.start(t); o2.start(t); o1.stop(t+d+0.1); o2.stop(t+d+0.1);
   }
-  const roots=[57,53,60,55]; const arpPattern=[0,7,12,7,0,7,12,14]; const stepDur=0.5;
-  function tick(){
-    if (!playing || !audio.enabled) return;
-    const t=now(); const bar=Math.floor(step/4); const root=roots[Math.floor(bar%roots.length)];
-    if (step%4===0){ playPad({freq:mtof(root),when:t+0.01,dur:3.8}); playPad({freq:mtof(root+7),when:t+0.01,dur:3.8,gain:0.08}); }
-    const intv=arpPattern[step%arpPattern.length];
-    playNote({freq:mtof(root+intv),when:t+0.02,dur:0.24,type:'triangle',gain:0.18});
-    step++;
+  const roots=[57,53,60,55], arp=[0,7,12,7,0,7,12,14], stepDur=0.5;
+  function tick(){ if (!playing||!audio.enabled) return; const t=now(); const bar=Math.floor(step/4); const r=roots[Math.floor(bar%roots.length)];
+    if (step%4===0){ playPad({freq:mtof(r),when:t+0.01,dur:3.8}); playPad({freq:mtof(r+7),when:t+0.01,dur:3.8,gain:0.08}); }
+    playNote({freq:mtof(r+arp[step%arp.length]),when:t+0.02,dur:0.24,type:'triangle',gain:0.18}); step++;
   }
-  function start(){ init(); if (playing) return; playing=true; tick(); timer=setInterval(()=>tick(), stepDur*1000); }
+  function start(){ init(); if (playing) return; playing=true; tick(); timer=setInterval(tick, stepDur*1000); }
   function stop(){ if (!playing) return; playing=false; if (timer){clearInterval(timer); timer=null;} }
   function setEnabled(on){ init(); master.gain.value = on?0.18:0.0; }
-  return { start, stop, setEnabled };
+  return {start, stop, setEnabled};
 })();
 function applyMuteUI(){
   if (!els.muteBtn) return;
@@ -188,7 +190,7 @@ if (els.muteBtn){
 ['pointerdown','keydown'].forEach(evt=>document.addEventListener(evt, unlockAudio, {once:true}));
 applyMuteUI();
 
-/* ===================== Leaderboard (local) ===================== */
+/* ============== Leaderboard (local) ============== */
 const LS_KEY = 'knightRunnerTopScores_v1';
 function loadScores(){ try{const raw=localStorage.getItem(LS_KEY);const a=raw?JSON.parse(raw):[];return Array.isArray(a)?a:[]}catch{ return [] } }
 function saveScores(arr){ try{localStorage.setItem(LS_KEY, JSON.stringify(arr));}catch{} }
@@ -229,37 +231,9 @@ if (els.resetScores){
   });
 }
 
-/* ===================== Build chessboard (SAFE: only squares) ===================== */
-function buildBoard(){
-  const cell = CELL(); const size = cell * SIZE;
-  els.game.style.position = 'relative';
-  els.game.style.width  = size + 'px';
-  els.game.style.height = size + 'px';
-
-  // Remove ONLY existing squares (keep knight, enemies, dots, guide)
-  els.game.querySelectorAll('.square').forEach(n => n.remove());
-
-  // Rebuild squares
-  for (let y = 0; y < SIZE; y++){
-    for (let x = 0; x < SIZE; x++){
-      const sq = document.createElement('div');
-      sq.className = 'square ' + ((x + y) % 2 ? 'dark' : 'light');
-      Object.assign(sq.style, {
-        position: 'absolute',
-        left: (x * cell) + 'px',
-        top:  (y * cell) + 'px',
-        width: cell + 'px',
-        height: cell + 'px',
-        background: ((x + y) % 2 ? '#b58863' : '#f0d9b5')
-      });
-      els.game.appendChild(sq);
-    }
-  }
-}
-
-/* ===================== Knight, Dots & Guide ===================== */
+/* ============== Glyphs & State ============== */
 const GLYPHS = {
-  knight:'\u265E\uFE0E', // ♞ (rendered white via CSS/inline color)
+  knight:'\u265E\uFE0E', // ♞ (we color it white for a filled white knight)
   pawn:'\u265F\uFE0E',   // ♟
   rook:'\u265C\uFE0E',   // ♜
   bishop:'\u265D\uFE0E', // ♝
@@ -280,47 +254,68 @@ let state = {
   timers: {}
 };
 
-let knightEl = null;
+/* ============== Board ============== */
+function buildBoard(){
+  ensureLayers();
+  const cell = CELL(); const size = cell * SIZE;
+  els.game.style.width  = size + 'px';
+  els.game.style.height = size + 'px';
+  // Only rebuild squares
+  layers.squares.innerHTML = '';
+  for (let y=0;y<SIZE;y++){
+    for (let x=0;x<SIZE;x++){
+      const sq = document.createElement('div');
+      sq.className = 'square ' + ((x+y)%2 ? 'dark' : 'light');
+      Object.assign(sq.style, {
+        position:'absolute',
+        left:(x*cell)+'px', top:(y*cell)+'px',
+        width:cell+'px', height:cell+'px',
+        background: ((x+y)%2 ? '#b58863' : '#f0d9b5'),
+        zIndex: '0'
+      });
+      layers.squares.appendChild(sq);
+    }
+  }
+}
+
+/* ============== Knight (with inline style) ============== */
+let knightEl=null;
 function ensureKnightEl(){
+  ensureLayers();
   if (knightEl && knightEl.isConnected) return knightEl;
   knightEl = document.createElement('div');
   knightEl.className = 'piece knight';
   knightEl.textContent = GLYPHS.knight;
-  els.game.appendChild(knightEl);
+  layers.pieces.appendChild(knightEl);
   return knightEl;
 }
 function styleKnightInline(){
   const c = CELL();
   Object.assign(knightEl.style, {
-    position: 'absolute',
-    width: c + 'px',
-    height: c + 'px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: (c * 0.86) + 'px',
-    color: '#fff',
-    textShadow: '0 2px 6px rgba(0,0,0,0.7)',
-    zIndex: '110',
-    pointerEvents: 'none',
-    userSelect: 'none'
+    position:'absolute',
+    width:c+'px', height:c+'px',
+    display:'flex', alignItems:'center', justifyContent:'center',
+    fontSize:(c*0.88)+'px',
+    color:'#fff', // make ♞ look like a filled white knight
+    textShadow:'0 2px 6px rgba(0,0,0,0.7)',
+    zIndex:'110',
+    pointerEvents:'none', userSelect:'none'
   });
 }
 function placeKnight(){
-  ensureKnightEl();
-  styleKnightInline();
-  const c = CELL();
+  ensureKnightEl(); styleKnightInline();
+  const c=CELL();
   knightEl.style.left = (state.knight.x*c)+'px';
   knightEl.style.top  = (state.knight.y*c)+'px';
 }
 
-/* SVG Guide (two-step arrow) */
+/* ============== SVG Guide ============== */
 const svgNS = 'http://www.w3.org/2000/svg';
 const guide = document.createElementNS(svgNS, 'svg');
 guide.setAttribute('id','guideLayer');
-function setGuideViewBox(){ const c = CELL(); guide.setAttribute('viewBox', `0 0 ${c*SIZE} ${c*SIZE}`); }
-setGuideViewBox();
-els.game.appendChild(guide);
+function setGuideViewBox(){ const c=CELL(); guide.setAttribute('viewBox', `0 0 ${c*SIZE} ${c*SIZE}`); }
+function attachGuide(){ ensureLayers(); if (!guide.isConnected){ layers.ui.appendChild(guide); } setGuideViewBox(); }
+attachGuide();
 const defs = document.createElementNS(svgNS,'defs');
 function mkMarker(id,color){
   const m=document.createElementNS(svgNS,'marker'); m.setAttribute('id',id); m.setAttribute('markerWidth','10'); m.setAttribute('markerHeight','10');
@@ -329,12 +324,12 @@ function mkMarker(id,color){
   m.appendChild(p); return m;
 }
 defs.appendChild(mkMarker('headPrimary','#2ecc71'));
-defs.appendChild(mkMarker('headHint','#00d2ff'));
+defs.appendChild(mkMarker('headHint',   '#00d2ff'));
 defs.appendChild(mkMarker('headInvalid','#e74c3c'));
 guide.appendChild(defs);
 function clearGuide(){ while (guide.lastChild && guide.lastChild!==defs) guide.removeChild(guide.lastChild); }
 
-/* Knight move dots */
+/* ============== Dots ============== */
 const knightOffsets = [
   {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
   {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
@@ -343,147 +338,103 @@ let dots=[];
 function updateDots(){
   dots.forEach(d=>d.remove()); dots=[];
   if (!state.running) return;
+  ensureLayers();
   const cell = CELL();
   for (const o of knightOffsets){
     const tx=state.knight.x+o.x, ty=state.knight.y+o.y;
     if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) continue;
-
     const dot=document.createElement('div');
-    dot.className='dot';
     Object.assign(dot.style, {
-      position: 'absolute',
-      left: (tx*cell)+'px',
-      top:  (ty*cell)+'px',
-      width: cell+'px',
-      height: cell+'px',
-      zIndex: '120',
-      cursor: 'pointer',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
+      position:'absolute', left:(tx*cell)+'px', top:(ty*cell)+'px',
+      width:cell+'px', height:cell+'px', zIndex:'120',
+      cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center'
     });
-
     const inner=document.createElement('span');
     Object.assign(inner.style, {
-      width: (cell*0.24)+'px',
-      height: (cell*0.24)+'px',
-      borderRadius: '50%',
-      background: '#2ecc71',
-      boxShadow: '0 0 0 3px rgba(46,204,113,0.27), 0 2px 6px rgba(0,0,0,0.44)'
+      width:(cell*0.24)+'px', height:(cell*0.24)+'px', borderRadius:'50%',
+      background:'#2ecc71', boxShadow:'0 0 0 3px rgba(46,204,113,0.27), 0 2px 6px rgba(0,0,0,0.44)'
     });
     dot.appendChild(inner);
-
     dot.addEventListener('click', ()=> moveKnightTo(tx,ty));
-
-    els.game.appendChild(dot); dots.push(dot);
+    layers.ui.appendChild(dot); dots.push(dot);
   }
 }
 
-/* ===================== Power-ups ===================== */
+/* ============== Power-ups ============== */
 const POWER_TYPES = ['shield','speed','slow','clear'];
 const POWER_GLYPH = { shield:'🛡', speed:'⚡', slow:'🕒', clear:'💥' };
-
 function spawnPowerUp(){
-  let tries = 20;
-  const cell = CELL();
-  while (tries-- > 0){
-    const x = Math.floor(Math.random()*SIZE);
-    const y = Math.floor(Math.random()*(SIZE-1));
-    if (x === state.knight.x && y === state.knight.y) continue;
-    if (state.enemies.some(e => Math.round(e.px/cell) === x && Math.round(e.py/cell) === y)) continue;
-
-    const type = POWER_TYPES[Math.floor(Math.random()*POWER_TYPES.length)];
-    const el = document.createElement('div');
-    el.className = 'power';
+  let tries=20; const cell=CELL(); ensureLayers();
+  while(tries-- > 0){
+    const x=Math.floor(Math.random()*SIZE);
+    const y=Math.floor(Math.random()*(SIZE-1));
+    if (x===state.knight.x && y===state.knight.y) continue;
+    if (state.enemies.some(e => Math.round(e.px/cell)===x && Math.round(e.py/cell)===y)) continue;
+    const type = POWER_TYPES[(Math.random()*POWER_TYPES.length)|0];
+    const el=document.createElement('div'); el.className='power';
     Object.assign(el.style, {
-      position:'absolute',
-      left: (x*cell)+'px',
-      top:  (y*cell)+'px',
-      width: cell+'px',
-      height: cell+'px',
-      zIndex: '80',
-      display:'flex',
-      alignItems:'center',
-      justifyContent:'center',
-      pointerEvents:'none'
+      position:'absolute', left:(x*cell)+'px', top:(y*cell)+'px',
+      width:cell+'px', height:cell+'px', zIndex:'80',
+      display:'flex', alignItems:'center', justifyContent:'center', pointerEvents:'none'
     });
     el.innerHTML = `<div class="glyph">${POWER_GLYPH[type]}</div><div class="ring"></div>`;
-    els.game.appendChild(el);
-
-    const expiresAt = performance.now() + 5500;
-    state.powerups.push({ el, type, x, y, expiresAt });
+    layers.pieces.appendChild(el);
+    const expiresAt=performance.now()+5500;
+    state.powerups.push({el,type,x,y,expiresAt});
     SFX.spawnPower();
     break;
   }
 }
 function pickupAt(x,y){
-  for (let i = state.powerups.length - 1; i >= 0; i--){
-    const p = state.powerups[i];
-    if (p.x === x && p.y === y){
-      applyPower(p.type, x, y);
-      if (p.el){ p.el.classList.add('fade'); setTimeout(()=>p.el && p.el.remove(), 450); }
-      state.powerups.splice(i, 1);
+  for (let i=state.powerups.length-1;i>=0;i--){
+    const p=state.powerups[i];
+    if (p.x===x && p.y===y){
+      applyPower(p.type,x,y);
+      if (p.el){ p.el.classList.add('fade'); setTimeout(()=>p.el && p.el.remove(),450); }
+      state.powerups.splice(i,1);
     }
   }
 }
 function applyPower(type,x,y){
   sparkle(x,y);
-  if (type === 'shield'){ state.shield = 1; els.bShield && els.bShield.classList.add('active'); SFX.pickupShield(); }
-  if (type === 'speed'){ state.speedMoves = 3; els.bSpeed  && els.bSpeed.classList.add('active'); SFX.pickupSpeed(); }
-  if (type === 'slow'){  state.slowUntil = performance.now()+5000; state.slowFactor = 0.5; els.bSlow && els.bSlow.classList.add('active'); SFX.pickupSlow(); }
-  if (type === 'clear'){ state.enemies.forEach(e=>e.el.remove()); state.enemies = []; SFX.pickupClear(); }
+  if (type==='shield'){ state.shield=1; els.bShield && els.bShield.classList.add('active'); SFX.pickupShield(); }
+  if (type==='speed'){ state.speedMoves=3; els.bSpeed && els.bSpeed.classList.add('active'); SFX.pickupSpeed(); }
+  if (type==='slow'){  state.slowUntil=performance.now()+5000; state.slowFactor=0.5; els.bSlow && els.bSlow.classList.add('active'); SFX.pickupSlow(); }
+  if (type==='clear'){ state.enemies.forEach(e=>e.el.remove()); state.enemies=[]; SFX.pickupClear(); }
 }
 function sparkle(x,y){
-  const cell = CELL();
-  for (let i=0;i<6;i++){
-    const s = document.createElement('div');
-    s.className = 'sparkle';
-    s.style.left = `${x*cell + cell*0.37 + Math.random()*cell*0.26}px`;
-    s.style.top  = `${y*cell + cell*0.37 + Math.random()*cell*0.26}px`;
-    s.style.background = i%2? '#2ecc71' : '#fff';
-    els.game.appendChild(s);
-    setTimeout(()=>s.remove(), 600);
+  ensureLayers(); const cell=CELL();
+  for(let i=0;i<6;i++){
+    const s=document.createElement('div'); s.className='sparkle';
+    s.style.left=`${x*cell + cell*0.37 + Math.random()*cell*0.26}px`;
+    s.style.top =`${y*cell + cell*0.37 + Math.random()*cell*0.26}px`;
+    s.style.position='absolute'; s.style.width='8px'; s.style.height='8px'; s.style.borderRadius='50%';
+    s.style.background = i%2? '#2ecc71':'#fff'; s.style.zIndex='150';
+    layers.ui.appendChild(s); setTimeout(()=>s.remove(),600);
   }
 }
 
-/* ===================== Enemies ===================== */
+/* ============== Enemies (in pieces layer) ============== */
 const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 }; // cells/sec
 function spawnEnemy(){
+  ensureLayers();
   const r=Math.random();
   const type = (r>0.85)?'queen' : (r>0.65)?'rook' : (r>0.40)?'bishop' : 'pawn';
   const x=Math.floor(Math.random()*SIZE), y=-1;
 
   const c = CELL();
-  const el=document.createElement('div');
-  el.className='piece enemy';
-  el.textContent=GLYPHS[type];
-
-  // Inline styles so they show even without CSS
+  const el=document.createElement('div'); el.className='piece enemy'; el.textContent=GLYPHS[type];
   Object.assign(el.style, {
-    position: 'absolute',
-    width: c + 'px',
-    height: c + 'px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: (c * 0.78) + 'px',
-    color: '#000',
-    filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.6))',
-    zIndex: '90',
-    pointerEvents: 'none',
-    userSelect: 'none',
-    left: (x*c) + 'px',
-    top:  (y*c) + 'px'
+    position:'absolute', width:c+'px', height:c+'px', display:'flex', alignItems:'center', justifyContent:'center',
+    fontSize:(c*0.78)+'px', color:'#000', filter:'drop-shadow(0 2px 2px rgba(0,0,0,0.6))',
+    zIndex:'90', pointerEvents:'none', userSelect:'none', left:(x*c)+'px', top:(y*c)+'px'
   });
-
-  els.game.appendChild(el);
+  layers.pieces.appendChild(el);
 
   const px=x*c, py=y*c;
-
   if (type==='queen'){
     const e={el,type,px,py,qx:x,qy:y,qtx:x,qty:0,qtpX:x*c,qtpY:0,stepSpeed:BASE_SPEED.queen};
-    pickNextQueenTarget(e); e.qtpX=e.qtx*c; e.qtpY=e.qty*c;
-    state.enemies.push(e); return;
+    pickNextQueenTarget(e); e.qtpX=e.qtx*c; e.qtpY=e.qty*c; state.enemies.push(e); return;
   }
   if (type==='bishop'){
     const dirX=(Math.random()<0.5)?-1:1;
@@ -491,11 +442,10 @@ function spawnEnemy(){
     if (e.btx<0||e.btx>=SIZE){ e.bdir=-e.bdir; e.btx=e.bx+e.bdir; e.btpX=e.btx*c; }
     state.enemies.push(e); return;
   }
-  // pawns/rooks
+  // pawns / rooks
   const vxCells=0;
   const vyCells=(type==='rook')? BASE_SPEED.rook : BASE_SPEED.pawn;
-  const e={el,type,px,py,vxCells,vyCells};
-  state.enemies.push(e);
+  state.enemies.push({el,type,px,py,vxCells,vyCells});
 }
 function pickNextQueenTarget(e){
   const cx=e.qx, cy=e.qy, ny=cy+1; const options=[];
@@ -509,19 +459,14 @@ function pickNextBishopTarget(e){
 }
 function stepEnemies(dt){
   const dtSec=dt/1000, nowT=performance.now();
-  // expire powerups (safe even if el already gone)
-  for (let i = state.powerups.length - 1; i >= 0; i--){
-    const p = state.powerups[i];
-    if (!p){ state.powerups.splice(i,1); continue; }
-    if (nowT > p.expiresAt){
-      if (p.el){ p.el.classList.add('fade'); setTimeout(()=>p.el && p.el.remove(), 450); }
-      state.powerups.splice(i,1);
-    }
+  // expire powerups
+  for (let i=state.powerups.length-1;i>=0;i--){
+    const p=state.powerups[i];
+    if (nowT>p.expiresAt){ if (p.el){ p.el.classList.add('fade'); setTimeout(()=>p.el && p.el.remove(),450); } state.powerups.splice(i,1); }
   }
   if (state.slowUntil && nowT>state.slowUntil){ state.slowUntil=0; state.slowFactor=1.0; els.bSlow && els.bSlow.classList.remove('active'); }
-  els.speed && (els.speed.textContent = (state.speedMult*(state.slowFactor||1)).toFixed(1)+'×');
-  const mult=state.speedMult*(state.slowFactor||1);
-  const cell=CELL(), maxX=(SIZE-1)*cell;
+  els.speed && (els.speed.textContent=(state.speedMult*(state.slowFactor||1)).toFixed(1)+'×');
+  const mult=state.speedMult*(state.slowFactor||1); const cell=CELL(), maxX=(SIZE-1)*cell;
 
   for (let i=state.enemies.length-1;i>=0;i--){
     const e=state.enemies[i];
@@ -542,13 +487,10 @@ function stepEnemies(dt){
         pickNextBishopTarget(e); e.btpX=e.btx*cell; e.btpY=e.bty*cell;
       }else{ const ux=dx/dist, uy=dy/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px'; }
     } else {
-      // pawns & rooks
       const vx=(e.vxCells||0)*cell*mult, vy=(e.vyCells||0)*cell*mult;
-      let newPx = e.px + vx*dtSec; if (newPx<0) newPx=0; if (newPx>maxX) newPx=maxX;
-      e.px = newPx; e.py += vy*dtSec; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
+      let newPx=e.px + vx*dtSec; if (newPx<0) newPx=0; if (newPx>maxX) newPx=maxX;
+      e.px=newPx; e.py+=vy*dtSec; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
     }
-
-    // collision
     const ex=Math.round(e.px/cell), ey=Math.round(e.py/cell);
     if (ex===state.knight.x && ey===state.knight.y){
       if (state.shield>0){ state.shield=0; els.bShield && els.bShield.classList.remove('active'); e.el.remove(); state.enemies.splice(i,1); els.game.classList.add('shake'); setTimeout(()=>els.game.classList.remove('shake'),220); SFX.shieldHit(); }
@@ -567,9 +509,9 @@ function stepEnemies(dt){
   if (knightEl) knightEl.classList.toggle('danger', danger);
 }
 
-/* ===================== Knight movement ===================== */
+/* ============== Knight movement & arrows ============== */
 function moveKnightTo(tx,ty){
-  if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) return; // stay on board
+  if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) return;
   state.knight.x=tx; state.knight.y=ty; placeKnight();
   SFX.jump(); pickupAt(tx,ty); checkCollision(); updateDots(); clearGuide();
   if (state.speedMoves>0){ state.speedMoves--; if (state.speedMoves===0 && els.bSpeed) els.bSpeed.classList.remove('active'); }
@@ -579,43 +521,37 @@ function checkCollision(){
   const hit = state.enemies.find(e => Math.round(e.px/cell)===state.knight.x && Math.round(e.py/cell)===state.knight.y);
   if (hit){ if (state.shield>0){ state.shield=0; els.bShield && els.bShield.classList.remove('active'); hit.el.remove(); state.enemies=state.enemies.filter(e=>e!==hit); SFX.shieldHit(); } else gameOver(); }
 }
-
-// Two-step arrow keys
 const DIRS = { up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
 let arrowStep=0, firstArrow=null;
 function drawFirstArrow(dir){
-  clearGuide();
-  const cell = CELL();
-  const cx = state.knight.x*cell + cell/2;
-  const cy = state.knight.y*cell + cell/2;
-  const tx = state.knight.x + dir.x*2;
-  const ty = state.knight.y + dir.y*2;
-  const inside = (tx>=0 && tx<SIZE && ty>=0 && ty<SIZE);
-  const ex = Math.max(0, Math.min((SIZE-1)*cell, tx*cell + cell/2));
-  const ey = Math.max(0, Math.min((SIZE-1)*cell, ty*cell + cell/2));
-  const prim = document.createElementNS(svgNS,'line');
-  prim.setAttribute('x1', cx); prim.setAttribute('y1', cy);
-  prim.setAttribute('x2', ex); prim.setAttribute('y2', ey);
-  prim.setAttribute('class','ga-primary' + (inside ? '' : ' ga-invalid'));
+  clearGuide(); attachGuide();
+  const cell=CELL();
+  const cx=state.knight.x*cell + cell/2, cy=state.knight.y*cell + cell/2;
+  const tx=state.knight.x + dir.x*2, ty=state.knight.y + dir.y*2;
+  const inside=(tx>=0 && tx<SIZE && ty>=0 && ty<SIZE);
+  const ex=Math.max(0, Math.min((SIZE-1)*cell, tx*cell + cell/2));
+  const ey=Math.max(0, Math.min((SIZE-1)*cell, ty*cell + cell/2));
+  const prim=document.createElementNS(svgNS,'line');
+  prim.setAttribute('x1',cx); prim.setAttribute('y1',cy); prim.setAttribute('x2',ex); prim.setAttribute('y2',ey);
+  prim.setAttribute('class','ga-primary' + (inside?'':' ga-invalid'));
   prim.setAttribute('marker-end', `url(#${inside?'headPrimary':'headInvalid'})`);
   guide.appendChild(prim);
-  const label = document.createElementNS(svgNS,'text');
-  label.setAttribute('x', ex + (dir.x===1? 10 : dir.x===-1? -10 : 0));
-  label.setAttribute('y', ey + (dir.y===1? 18 : dir.y===-1? -10 : -12));
-  label.setAttribute('text-anchor', dir.x===-1 ? 'end' : 'start');
+  const label=document.createElementNS(svgNS,'text');
+  label.setAttribute('x', ex + (dir.x===1?10:dir.x===-1?-10:0));
+  label.setAttribute('y', ey + (dir.y===1?18:dir.y===-1?-10:-12));
+  label.setAttribute('text-anchor', dir.x===-1? 'end':'start');
   label.setAttribute('class','ga-label');
   label.textContent = inside ? 'then choose ⟂' : 'out of bounds';
   guide.appendChild(label);
-  if (!inside){ els.game.classList.add('shake'); setTimeout(()=>els.game.classList.remove('shake'), 220); return; }
+  if (!inside){ els.game.classList.add('shake'); setTimeout(()=>els.game.classList.remove('shake'),220); return; }
   const hints=[];
   if (dir.x!==0){ hints.push({hx:tx,hy:ty+1}); hints.push({hx:tx,hy:ty-1}); }
   else { hints.push({hx:tx+1,hy:ty}); hints.push({hx:tx-1,hy:ty}); }
   for (const h of hints){
     if (h.hx<0||h.hx>=SIZE||h.hy<0||h.hy>=SIZE) continue;
-    const hx=h.hx*cell + cell/2, hy=h.hy*cell + cell/2;
+    const hx=h.hx*cell+cell/2, hy=h.hy*cell+cell/2;
     const line=document.createElementNS(svgNS,'line');
-    line.setAttribute('x1', ex); line.setAttribute('y1', ey);
-    line.setAttribute('x2', hx); line.setAttribute('y2', hy);
+    line.setAttribute('x1',ex); line.setAttribute('y1',ey); line.setAttribute('x2',hx); line.setAttribute('y2',hy);
     line.setAttribute('class','ga-hint'); line.setAttribute('marker-end','url(#headHint)');
     guide.appendChild(line);
   }
@@ -637,7 +573,7 @@ document.addEventListener('keydown', (e)=>{
   const dir=DIRS[k]; if (!dir) return; processArrow(dir);
 });
 
-/* ===================== Difficulty & spawns ===================== */
+/* ============== Difficulty & spawn timers ============== */
 const baseSpawnDelay=1500;
 function scheduleSpawn(){
   const next=Math.max(60, baseSpawnDelay / (state.speedMult*(state.slowFactor||1)));
@@ -651,13 +587,13 @@ function scheduleDifficulty(){
   state.timers.diff=setInterval(()=>{
     if (!state.running) return;
     state.speedMult += 0.4;
-    els.speed && (els.speed.textContent = (state.speedMult*(state.slowFactor||1)).toFixed(1)+'×');
+    els.speed && (els.speed.textContent=(state.speedMult*(state.slowFactor||1)).toFixed(1)+'×');
     clearTimeout(state.timers.spawn);
     scheduleSpawn();
   }, 6000);
 }
 
-/* ===================== Game over & restart ===================== */
+/* ============== Game over / restart ============== */
 function gameOver(){
   if (!state.running) return;
   state.running=false; clearTimeout(state.timers.spawn); clearInterval(state.timers.diff);
@@ -675,7 +611,7 @@ function gameOver(){
       <button id="saveBtn">Save Score</button>
     </div>
     <button id="restart">Play Again</button>`;
-  els.game.appendChild(over); over.style.display='flex';
+  els.game.appendChild(over); over.style.position='absolute'; over.style.inset='0'; over.style.display='flex';
 
   const nameInput=over.querySelector('#playerName');
   const saveBtn=over.querySelector('#saveBtn');
@@ -690,9 +626,7 @@ function gameOver(){
       saveBtn.disabled=true; renderLeaderboard(name, finalScore);
     });
   }
-  if (restartBtn){
-    restartBtn.addEventListener('click', restart);
-  }
+  if (restartBtn){ restartBtn.addEventListener('click', restart); }
 }
 function restart(){
   state.enemies.forEach(e=>e.el.remove()); state.enemies=[];
@@ -710,29 +644,17 @@ function restart(){
   if (audio.ctx && audio.ctx.state === 'running') Music.start();
 }
 
-/* ===================== Relayout on resize ===================== */
+/* ============== Relayout ============== */
 function relayoutAll(){
-  const cell = CELL(); const size = cell * SIZE;
-  els.game.style.width  = size + 'px';
-  els.game.style.height = size + 'px';
-  els.game.querySelectorAll('.square').forEach((sq, i) => {
-    const x = i % SIZE, y = (i / SIZE) | 0;
-    sq.style.left   = (x * cell) + 'px';
-    sq.style.top    = (y * cell) + 'px';
-    sq.style.width  = cell + 'px';
-    sq.style.height = cell + 'px';
-  });
-  placeKnight();
-  setGuideViewBox();
-  updateDots();
+  setBoardVars(); buildBoard(); placeKnight(); setGuideViewBox(); updateDots();
 }
 if (window.ResizeObserver){
-  new ResizeObserver(()=>{ setBoardVars(); relayoutAll(); }).observe(els.game);
+  new ResizeObserver(()=>{ relayoutAll(); }).observe(els.game);
 }else{
-  window.addEventListener('resize', ()=>{ setBoardVars(); relayoutAll(); }, {passive:true});
+  window.addEventListener('resize', ()=>{ relayoutAll(); }, {passive:true});
 }
 
-/* ===================== Main loop & start ===================== */
+/* ============== Loop & Start ============== */
 function loop(now){
   if (!state.running) return;
   const dt=now-state.lastTime; state.lastTime=now;
@@ -742,17 +664,15 @@ function loop(now){
 }
 (function start(){
   installSizing();
+  ensureLayers();
   setBoardVars();
-  buildBoard();     // build squares first
-  placeKnight();    // then ensure knight is attached and visible
+  buildBoard();      // build squares
+  placeKnight();     // then put knight on top
   updateDots();
-  // spawnEnemy();  // (optional) uncomment to spawn one immediately for visibility
+  // spawn one immediately so you SEE something falling:
+  spawnEnemy();
   scheduleSpawn();
   scheduleDifficulty();
   requestAnimationFrame(t=>{ state.lastTime=t; requestAnimationFrame(loop); });
-
-  // Only start music if context is running; otherwise first tap/keypress unlocks.
-  if (audio.ctx && audio.ctx.state === 'running') {
-    Music.start();
-  }
+  if (audio.ctx && audio.ctx.state === 'running') { Music.start(); }
 })();
