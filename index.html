@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Knight Runner</title>
 
-  <!-- Main CSS (path/case must match exactly on GitHub Pages) -->
-  <link rel="stylesheet" href="style.css?v=fit-ipad-4">
+  <!-- Main CSS (path/case must match exactly) -->
+  <link rel="stylesheet" href="style.css?v=fit-lock-1">
 
   <!-- Minimal fallback so a board is visible even if CSS/JS fail -->
   <style id="board-fallback">
@@ -77,10 +77,10 @@
       const text = document.getElementById('errorText');
       function show(msg){
         overlay.style.display='flex';
-        text.textContent='JavaScript error:\n\n' + msg;
+        text.textContent='JavaScript error:\\n\\n' + msg;
       }
       window.addEventListener('error', e=>{
-        show((e.message||'Unknown error') + (e.filename? '\n'+e.filename:'') + (e.lineno? ':'+e.lineno:''));
+        show((e.message||'Unknown error') + (e.filename? '\\n'+e.filename:'') + (e.lineno? ':'+e.lineno:''));
       });
       window.addEventListener('unhandledrejection', e=>{
         show('Unhandled promise: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)));
@@ -88,39 +88,45 @@
     })();
   </script>
 
-  <!-- iPad/iPhone fit script: always fits board to visible viewport (no initial scroll needed) -->
+  <!-- Fit script: size board to visible viewport; lock scroll when it fits -->
   <script>
     (function(){
       const root  = document.documentElement;
+      const body  = document.body;
       const game  = document.getElementById('game');
       const title = document.querySelector('h1');
       const hud   = document.getElementById('hud');
+      const lb    = document.getElementById('leaderboard');
 
       const vvh = () => (window.visualViewport && window.visualViewport.height) || window.innerHeight || 600;
       const vvw = () => (window.visualViewport && window.visualViewport.width)  || window.innerWidth  || 600;
 
-      function headerHeight(){
-        let h = 0;
-        if (title) h += Math.ceil(title.getBoundingClientRect().height);
-        if (hud)   h += Math.ceil(hud.getBoundingClientRect().height);
-        return h;
-      }
-      function safePaddingBottom(){
-        return parseFloat(getComputedStyle(document.body).paddingBottom) || 0;
-      }
+      function h(el){ return el ? Math.ceil(el.getBoundingClientRect().height) : 0; }
+      function safePadBottom(){ return parseFloat(getComputedStyle(body).paddingBottom) || 0; }
 
       function fitBoard(){
-        const pad = 12; // breathing room below HUD
-        const usableH = Math.floor(vvh() - headerHeight() - pad - safePaddingBottom());
-        const usableW = Math.floor(vvw() - 16); // ~8px margin each side
+        const pad = 12; // breathing room between HUD and board
+        const usableH = Math.floor(vvh() - h(title) - h(hud) - pad - safePadBottom());
+        const usableW = Math.floor(vvw() - 16); // ~8px margins
         const size    = Math.max(240, Math.min(usableH, usableW));
 
+        // Apply size
         root.style.setProperty('--board', size + 'px');
         root.style.setProperty('--cell',  (size/8) + 'px');
-
-        // Hard set fallback sizes so board fits even if CSS vars fail
         game.style.width  = size + 'px';
         game.style.height = size + 'px';
+
+        // Decide if everything fits without page scroll
+        const totalNeeded = h(title) + h(hud) + size + h(lb) + safePadBottom() + 1; // +1px fudge
+        const fits = totalNeeded <= vvh();
+
+        if (fits) {
+          body.style.overflowY = 'hidden';
+          body.style.height = vvh() + 'px';   // lock to current visible viewport
+        } else {
+          body.style.overflowY = 'auto';
+          body.style.height = '';             // allow natural scroll
+        }
       }
 
       if (window.visualViewport){
@@ -132,19 +138,22 @@
       document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(fitBoard, 60); });
       if (document.fonts && document.fonts.ready) { document.fonts.ready.then(fitBoard).catch(()=>{}); }
 
-      // First run + delayed runs to catch URL-bar animations
+      // Initial + delayed passes to catch URL bar animations
       fitBoard(); setTimeout(fitBoard, 150); setTimeout(fitBoard, 600);
+
+      // Hook so other scripts can re-fit (e.g., after "Show more")
+      window.krFitBoard = fitBoard;
     })();
   </script>
 
-  <!-- Modern browsers: ES module entry (main.js should set window.__KR_BOOT__ = 'loaded') -->
-  <script type="module" src="./js/main.js?v=fit-ipad-4"></script>
+  <!-- Modern browsers: ES module entry -->
+  <script type="module" src="./js/main.js?v=fit-lock-1"></script>
 
   <!-- Old browsers: friendly message instead of failing silently -->
   <script nomodule>
     (function () {
       var msg =
-        "Your browser is too old to run Knight Runner.\n\n" +
+        "Your browser is too old to run Knight Runner.\\n\\n" +
         "Please update to a recent version of Chrome, Edge, Firefox, or Safari (iOS 12+).";
       var d = document.createElement('div');
       d.style.cssText="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#111;color:#fff;z-index:10000;padding:24px;text-align:center;white-space:pre-wrap";
@@ -174,12 +183,12 @@
         const text = document.getElementById('errorText');
         overlay.style.display = 'flex';
         text.textContent =
-          "Your module entry js/main.js did not execute.\n\n" +
-          "Likely causes:\n" +
-          "• Path or filename case mismatch (GitHub Pages is case-sensitive)\n" +
-          "• File missing (404) or a syntax/runtime error early in the file\n\n" +
-          "Quick test: open /js/main.js directly in your browser.\n" +
-          "If you see a 404, fix the path/case.\n";
+          "Your module entry js/main.js did not execute.\\n\\n" +
+          "Likely causes:\\n" +
+          "• Path or filename case mismatch (GitHub Pages is case-sensitive)\\n" +
+          "• File missing (404) or a syntax/runtime error early in the file\\n\\n" +
+          "Quick test: open /js/main.js directly in your browser.\\n" +
+          "If you see a 404, fix the path/case.\\n";
       }
     }, 1200);
   </script>
