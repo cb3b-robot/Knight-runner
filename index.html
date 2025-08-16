@@ -6,11 +6,11 @@
   <title>Knight Runner</title>
 
   <!-- Main CSS (path/case must match exactly on GitHub Pages) -->
-  <link rel="stylesheet" href="style.css?v=fit-ipad-3">
+  <link rel="stylesheet" href="style.css?v=fit-ipad-4">
 
   <!-- Minimal fallback so a board is visible even if CSS/JS fail -->
   <style id="board-fallback">
-    :root{ --board:min(92vmin,92svmin); --cell:calc(var(--board)/8); }
+    :root{ --board:min(92vmin,92vh); --cell:calc(var(--board)/8); }
     body{ margin:0; background:#111; color:#fff; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
           display:flex; flex-direction:column; align-items:center; gap:10px;
           padding: env(safe-area-inset-top) 10px env(safe-area-inset-bottom); }
@@ -79,10 +79,10 @@
         overlay.style.display='flex';
         text.textContent='JavaScript error:\n\n' + msg;
       }
-      addEventListener('error', e=>{
+      window.addEventListener('error', e=>{
         show((e.message||'Unknown error') + (e.filename? '\n'+e.filename:'') + (e.lineno? ':'+e.lineno:''));
       });
-      addEventListener('unhandledrejection', e=>{
+      window.addEventListener('unhandledrejection', e=>{
         show('Unhandled promise: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)));
       });
     })();
@@ -130,19 +130,15 @@
       window.addEventListener('resize', fitBoard, {passive:true});
       window.addEventListener('orientationchange', () => setTimeout(fitBoard, 120), {passive:true});
       document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(fitBoard, 60); });
-      if (document.fonts && document.fonts.ready) { document.fonts.ready.then(fitBoard); }
+      if (document.fonts && document.fonts.ready) { document.fonts.ready.then(fitBoard).catch(()=>{}); }
 
       // First run + delayed runs to catch URL-bar animations
       fitBoard(); setTimeout(fitBoard, 150); setTimeout(fitBoard, 600);
     })();
   </script>
 
-  <!-- Modern browsers: ES module entry -->
-  <script type="module">
-    // watchdog: set a flag so we know the module executed
-    window.__KR_BOOT__ = 'loaded';
-  </script>
-  <script type="module" src="./js/main.js?v=fit-ipad-3"></script>
+  <!-- Modern browsers: ES module entry (main.js should set window.__KR_BOOT__ = 'loaded') -->
+  <script type="module" src="./js/main.js?v=fit-ipad-4"></script>
 
   <!-- Old browsers: friendly message instead of failing silently -->
   <script nomodule>
