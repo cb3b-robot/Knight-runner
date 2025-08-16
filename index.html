@@ -1,129 +1,75 @@
-// js/main.js
-console.log('[main] boot');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Knight Runner</title>
+  <link rel="stylesheet" href="./css/style.css?v=1">
+  <style>
+    /* Overlay for debugging errors */
+    #errorOverlay {
+      position: fixed; inset: 0;
+      background: #1b1b1bcc; color: #fff;
+      z-index: 99999; display: none;
+      align-items: flex-start; justify-content: center;
+      padding: 16px; overflow: auto;
+    }
+    #errorOverlay pre {
+      max-width: 900px; width: 100%;
+      background: #2a2a2a; border: 1px solid #ff6b6b;
+      border-radius: 10px; padding: 12px;
+      white-space: pre-wrap; word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <h1>Knight Runner</h1>
 
-// ---- Imports (filenames/case must match your repo exactly) ----
-import { els, state, CELL } from './state.js';
-import { installSizing } from './sizing.js';
-import { buildBoard, updateDots, relayoutAll } from './board.js';
-import { setupGuide } from './guide.js';
-import { installControls } from './controls.js';
-import { spawnEnemyOrPower, stepEnemies } from './enemies.js';
-import { installLeaderboard, addScore, renderLeaderboard } from './leaderboard.js';
+  <div class="hud">
+    <div class="pill">Score: <span id="score">0.0</span>s</div>
+    <div class="pill">Speed: <span id="speed">1.0×</span></div>
+    <div id="status">
+      <div class="badge" id="bShield">🛡 shield</div>
+      <div class="badge" id="bSpeed">⚡ speed</div>
+      <div class="badge" id="bSlow">🕒 slow</div>
+      <button id="muteBtn" aria-pressed="false" title="Mute/Unmute">🔊</button>
+    </div>
+  </div>
 
-// Optional: tiny on-screen badge so you know main.js ran
-(() => {
-  const tag = document.createElement('div');
-  tag.textContent = 'main.js loaded';
-  tag.style.cssText = 'position:fixed;top:8px;left:8px;background:#2ecc71;color:#111;padding:4px 6px;border-radius:6px;font:600 12px system-ui;z-index:9999';
-  document.body.appendChild(tag);
-  setTimeout(() => tag.remove(), 1600);
-})();
+  <div id="game"></div>
 
-// Reuse the error overlay that exists in index.html
-function showError(msg){
-  const o=document.getElementById('errorOverlay'), t=document.getElementById('errorText');
-  if (!o || !t) { console.error(msg); return; }
-  o.style.display='flex'; t.textContent = 'JavaScript error:\n\n' + msg;
-}
-
-// ---- Bootstrap ----
-try {
-  // Layout and UI
-  installSizing();          // sets --board based on viewport (iPad-friendly)
-  buildBoard();             // draws the 8x8 squares and knight
-  setupGuide();             // SVG arrows for the two-step input
-  installControls();        // keyboard controls (two-step L-move)
-  installLeaderboard();     // local leaderboard + show more/less
-  updateDots();             // show knight move dots immediately
-
-  // Resize-aware relayout (keeps pieces perfectly aligned when device rotates)
-  let lastCell = CELL();
-  if (window.ResizeObserver){
-    new ResizeObserver(() => {
-      const newCell = CELL();
-      relayoutAll(lastCell);  // rescales/enemy/powerup positions + dots + guide viewBox
-      lastCell = newCell;
-    }).observe(els.game);
-  }
-
-  // ---- Spawning & difficulty scaling ----
-  function scheduleSpawn(){
-    const baseSpawnDelay = 1500; // ms
-    const next = Math.max(60, baseSpawnDelay / (state.speedMult * (state.slowFactor || 1)));
-    state.timers = state.timers || {};
-    state.timers.spawn = setTimeout(function tick(){
-      if (!state.running) return;
-      spawnEnemyOrPower();  // 88% enemy / 12% power-up (set in enemies/powerups modules)
-      scheduleSpawn();
-    }, next);
-  }
-
-  function scheduleDifficulty(){
-    state.timers = state.timers || {};
-    state.timers.diff = setInterval(() => {
-      if (!state.running) return;
-      state.speedMult += 0.4; // increases every 6s
-      els.speed.textContent = (state.speedMult * (state.slowFactor || 1)).toFixed(1) + '×';
-      clearTimeout(state.timers.spawn);
-      scheduleSpawn();
-    }, 6000);
-  }
-
-  // ---- Game over flow (called by other modules via window.__gameOver) ----
-  window.__gameOver = function(){
-    if (!state.running) return;
-    state.running = false;
-    if (state.timers){ clearTimeout(state.timers.spawn); clearInterval(state.timers.diff); }
-
-    els.game.classList.add('shake');
-    setTimeout(() => els.game.classList.remove('shake'), 350);
-
-    const over = document.createElement('div');
-    over.id = 'over';
-    const finalScore = parseFloat(els.score.textContent) || 0;
-    over.innerHTML = `
-      <h2>Game Over</h2>
-      <p>You survived <strong>${finalScore.toFixed(1)}s</strong></p>
-      <div id="saveRow">
-        <input id="playerName" maxlength="16" placeholder="Your name">
-        <button id="saveBtn">Save Score</button>
+  <div id="leaderboard">
+    <header>
+      <h3>Leaderboard (This device)</h3>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <div id="lbStatus">saved locally</div>
+        <button id="toggleLB">Show more</button>
+        <button id="resetScores">Reset Scores</button>
       </div>
-      <button id="restart">Play Again</button>`;
-    els.game.appendChild(over);
-    over.style.display = 'flex';
+    </header>
+    <ol id="lbList"></ol>
+  </div>
 
-    const nameInput = over.querySelector('#playerName');
-    const saveBtn   = over.querySelector('#saveBtn');
-    const restartBtn= over.querySelector('#restart');
-    const lastName  = localStorage.getItem('knightRunner_lastName') || '';
-    if (lastName) nameInput.value = lastName;
+  <!-- Error overlay for debugging -->
+  <div id="errorOverlay"><pre id="errorText"></pre></div>
 
-    saveBtn.addEventListener('click', () => {
-      const name = (nameInput.value || 'Player').trim();
-      localStorage.setItem('knightRunner_lastName', name);
-      addScore(name, finalScore);
-      saveBtn.disabled = true;
-      renderLeaderboard(name, finalScore);
-    });
+  <script>
+    // Catch errors and show them on screen (instead of blank page)
+    (function(){
+      const overlay = document.getElementById('errorOverlay');
+      const text = document.getElementById('errorText');
+      function show(msg){
+        overlay.style.display='flex';
+        text.textContent='JavaScript error:\n\n'+msg;
+      }
+      window.addEventListener('error', e =>
+        show((e.message||'Unknown error')+(e.filename?'\n'+e.filename:'')+(e.lineno?':'+e.lineno:'')));
+      window.addEventListener('unhandledrejection', e =>
+        show('Unhandled promise: '+(e.reason && e.reason.message ? e.reason.message : String(e.reason))));
+    })();
+  </script>
 
-    restartBtn.addEventListener('click', () => location.reload());
-  };
-
-  // ---- Main loop ----
-  function loop(ts){
-    if (!state.running) return;
-    const dt = ts - state.lastTime; state.lastTime = ts;
-    stepEnemies(dt); // smooth enemy/powerup updates + collisions
-    els.score.textContent = ((ts - state.startTime) / 1000).toFixed(1);
-    requestAnimationFrame(loop);
-  }
-
-  // Go!
-  scheduleSpawn();
-  scheduleDifficulty();
-  requestAnimationFrame(t => { state.lastTime = t; requestAnimationFrame(loop); });
-
-} catch (err) {
-  console.error(err);
-  showError(err && err.stack ? err.stack : String(err));
-}
+  <!-- Load entry script (imports everything else) -->
+  <script type="module" src="./js/main.js?v=1"></script>
+</body>
+</html>
