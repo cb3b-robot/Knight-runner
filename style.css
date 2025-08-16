@@ -1,47 +1,83 @@
-/* ================= Knight Runner — style.css ================= */
-/* Responsive variables (JS also sets inline sizes as fallback) */
+/* ===================== Root & resets ===================== */
 :root{
-  --board: 92vmin;              /* updated by JS */
-  --cell: calc(var(--board)/8); /* updated by JS */
+  --board: 600px;                 /* JS will update this responsively */
+  --cell: calc(var(--board)/8);   /* 8x8 grid */
+  --bg: #0f1115;
+  --panel: #171a20;
+  --panel-2: #1c1f27;
+  --border: #2a2e37;
+  --text: #eaeef5;
+  --muted: #a9b1c3;
+  --accent: #2ecc71;
+  --accent-2: #00d2ff;
+  --danger: #e74c3c;
 }
 
-/* Base / reset */
-*{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
-html,body{ height:100%; }
-html{ -webkit-text-size-adjust:100%; }
+*{ box-sizing: border-box; }
+html, body { height: 100%; }
 body{
   margin:0;
-  background:#111;
-  color:#fff;
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-  display:flex; flex-direction:column; align-items:center; gap:10px;
-  padding: env(safe-area-inset-top) 8px env(safe-area-inset-bottom);
+  background:
+    radial-gradient(1200px 800px at 85% -20%, #1a2033 0%, transparent 60%),
+    radial-gradient(800px 700px at -15% 120%, #12202a 0%, transparent 60%),
+    var(--bg);
+  color:var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:10px;
+  padding: env(safe-area-inset-top) 10px env(safe-area-inset-bottom);
   overflow:hidden;
+  -webkit-tap-highlight-color: transparent;
 }
-h1{ margin:6px 0 0; font-size:clamp(18px,3.8vw,28px); }
 
-/* HUD */
-.hud{ display:flex; gap:10px; align-items:center; justify-content:center;
-  flex-wrap:wrap; font-weight:600; text-shadow:0 1px 2px #0008; padding:4px 0; }
-.pill{ padding:6px 10px; border-radius:999px; background:#222; border:1px solid #333; }
-#status{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.badge{ padding:4px 8px; border-radius:999px; border:1px solid #444; background:#1c1c1c; font-size:12px; opacity:.9 }
-.badge.active{ border-color:#2ecc71; box-shadow:0 0 0 2px #2ecc7133 inset; }
-#muteBtn{ padding:6px 10px; border-radius:999px; border:1px solid #444; background:#1c1c1c; color:#fff; cursor:pointer; }
+h1{
+  margin:6px 0 0;
+  font-size: clamp(18px, 3.8vw, 28px);
+  letter-spacing:.3px;
+  text-shadow: 0 2px 8px #0008;
+}
 
-/* Game frame */
+/* ===================== HUD ===================== */
+.hud{
+  display:flex; gap:10px; align-items:center; justify-content:center;
+  flex-wrap:wrap; font-weight:600; text-shadow:0 1px 2px #0008; padding:4px 0;
+}
+.pill{
+  padding:6px 10px; border-radius:999px; background:var(--panel);
+  border:1px solid var(--border);
+  box-shadow: inset 0 0 0 1px #0006, 0 8px 20px #0004;
+}
+#status{ display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+.badge{
+  padding:4px 8px; border-radius:999px; border:1px solid var(--border);
+  background:var(--panel-2); font-size:12px; opacity:.95;
+}
+.badge.active{ border-color:var(--accent); box-shadow:0 0 0 2px #2ecc7133 inset; }
+
+#muteBtn{
+  padding:6px 10px; border-radius:999px; border:1px solid var(--border);
+  background:var(--panel-2); color:var(--text); cursor:pointer; font-weight:700;
+}
+#muteBtn:active{ transform: translateY(1px); }
+
+/* ===================== Game frame ===================== */
 #game{
   position:relative;
-  width:var(--board);
-  height:var(--board);
-  border:4px solid #fff;
-  border-radius:12px;
-  overflow:hidden;
-  box-shadow:0 12px 40px #0008, inset 0 0 0 1px #0006;
+  width:var(--board); height:var(--board);
+  border-radius:14px; overflow:hidden;
+  border:1px solid #ffffff18;
+  background:#0c0e13;
+  box-shadow:
+    0 20px 60px #000a,
+    inset 0 0 0 1px #0006,
+    inset 0 0 60px #0008;
   transition:transform .12s ease;
-  touch-action:manipulation;
 }
-#game.shake{ animation:shake .35s ease; }
+#game.shake{ animation: shake .35s ease; }
 @keyframes shake{
   0%,100%{ transform:translate3d(0,0,0) }
   20%{ transform:translate3d(-6px,0,0) }
@@ -50,48 +86,69 @@ h1{ margin:6px 0 0; font-size:clamp(18px,3.8vw,28px); }
   80%{ transform:translate3d(4px,0,0) }
 }
 
-/* Board squares (JS positions and sizes inline too) */
-.square{ position:absolute; width:var(--cell); height:var(--cell); }
-.light{ background:#f0d9b5; }
-.dark { background:#b58863; }
+/* Layer containers (JS creates these) */
+#layer-squares, #layer-pieces, #layer-ui{ position:absolute; inset:0; }
+#layer-pieces{ z-index:100; pointer-events:none; }
+#layer-ui{ z-index:140; }
 
-/* Pieces (JS sets inline sizes/positions for reliability) */
-.piece{
+/* ===================== Board squares ===================== */
+.square{
   position:absolute;
-  width:var(--cell);
-  height:var(--cell);
+  width:var(--cell); height:var(--cell);
+  /* Fallback if inline background not set */
+  background:#f0d9b5;
+}
+.square.dark{ background:#b58863; }
+.square.light{ background:#f0d9b5; }
+
+/* Optional subtle grid lines for clarity on mobile */
+.square::after{
+  content:"";
+  position:absolute; inset:0;
+  box-shadow: inset 0 0 0 1px #00000012;
+  pointer-events:none;
+}
+
+/* ===================== Pieces ===================== */
+.piece{
+  position:absolute; width:var(--cell); height:var(--cell);
   display:flex; align-items:center; justify-content:center;
-  pointer-events:none; user-select:none;
-  font-size:calc(var(--cell)*0.8);
+  user-select:none; pointer-events:none;
 }
 .knight{
   z-index:110;
-  color:#fff;                 /* white-filled look when using ♞ with white color or heavy shadow on ♘ */
-  text-shadow:0 2px 6px #0009;
-  transition:left .18s cubic-bezier(.2,.7,.2,1), top .18s cubic-bezier(.2,.7,.2,1), filter .2s ease;
+  color:#fff;                                 /* white-filled look for ♞ */
+  text-shadow: 0 2px 6px #000a, 0 0 12px #ffffff55;
+  font-size: calc(var(--cell) * 0.88);
+  transition: left .18s cubic-bezier(.2,.7,.2,1), top .18s cubic-bezier(.2,.7,.2,1), filter .2s ease;
 }
-.knight.danger{ filter:drop-shadow(0 0 10px #e74c3c); }
+.knight.danger{ filter: drop-shadow(0 0 12px #e74c3c); }
+
 .enemy{
-  z-index:90;
-  color:#000;
-  filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));
-  font-size:calc(var(--cell)*0.72);
+  z-index:90; color:#000;
+  text-shadow: none;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,.6));
+  font-size: calc(var(--cell) * 0.78);
 }
 
-/* Power-ups */
+/* ===================== Power-ups ===================== */
 .power{
   position:absolute; z-index:80; width:var(--cell); height:var(--cell);
   display:flex; align-items:center; justify-content:center; pointer-events:none;
 }
-.power .glyph{ font-size:calc(var(--cell)*0.42); filter:drop-shadow(0 2px 4px #0008); }
+.power .glyph{
+  font-size: calc(var(--cell) * 0.44);
+  filter: drop-shadow(0 2px 4px #0008);
+}
 .power .ring{
   position:absolute; width:calc(var(--cell)*0.36); height:calc(var(--cell)*0.36);
-  border-radius:50%; box-shadow:0 0 0 3px #fff6 inset, 0 0 10px #fff6;
+  border-radius:50%;
+  box-shadow: 0 0 0 3px #fff6 inset, 0 0 10px #fff6;
 }
-.power.fade{ animation:fadeout .45s forwards; }
-@keyframes fadeout{ to{ opacity:0; transform:scale(.9); } }
+.power.fade{ animation: fadeout .45s forwards; }
+@keyframes fadeout{ to{ opacity:0; transform:scale(.9) } }
 
-/* Knight move dots */
+/* ===================== Knight move dots ===================== */
 .dot{
   position:absolute; width:var(--cell); height:var(--cell);
   display:flex; align-items:center; justify-content:center;
@@ -99,93 +156,112 @@ h1{ margin:6px 0 0; font-size:clamp(18px,3.8vw,28px); }
 }
 .dot span{
   width:calc(var(--cell)*0.24); height:calc(var(--cell)*0.24);
-  border-radius:50%; background:#2ecc71;
-  box-shadow:0 0 0 3px #2ecc7144, 0 2px 6px #0007;
+  border-radius:50%; background:var(--accent);
+  box-shadow: 0 0 0 3px #2ecc7144, 0 2px 6px #0007;
+  transform: scale(1); transition: transform .08s ease;
 }
-.dot:active span{ transform:scale(.92); }
+.dot:hover span{ transform: scale(1.08); }
+.dot:active span{ transform: scale(.92); }
 
-/* SVG Arrow Guide */
+/* ===================== SVG Arrow Guide ===================== */
 #guideLayer{ position:absolute; inset:0; pointer-events:none; z-index:140; }
-.ga-primary{ stroke:#2ecc71; stroke-width:8; fill:none; filter:drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
-.ga-hint{ stroke:#00d2ff; stroke-width:6; fill:none; stroke-dasharray:10 8; filter:drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
-.ga-invalid{ stroke:#e74c3c; opacity:.6; }
+.ga-primary{ stroke:var(--accent);  stroke-width:8; fill:none; filter:drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
+.ga-hint{    stroke:var(--accent-2); stroke-width:6; fill:none; stroke-dasharray:10 8; filter:drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
+.ga-invalid{ stroke:var(--danger); opacity:.7; }
 .ga-label{
-  font:600 14px/1 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  font: 700 14px/1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   fill:#fff; paint-order:stroke; stroke:#000; stroke-width:3px;
 }
 
-/* Game over overlay */
+/* ===================== Game Over overlay ===================== */
 #over{
-  position:absolute; inset:0; background:rgba(0,0,0,.55);
+  position:absolute; inset:0;
+  background: rgba(0,0,0,.55);
   display:none; align-items:center; justify-content:center; flex-direction:column;
   z-index:200; text-align:center; padding:20px;
+  backdrop-filter: blur(3px);
 }
 #over h2{ margin:0 0 8px; font-size:clamp(20px,5vw,36px); }
-#over p{ margin:0 0 12px; opacity:.9; }
+#over p{ margin:0 0 12px; opacity:.95; }
+
 #restart{
   padding:10px 14px; border-radius:10px; border:1px solid #fff4;
-  background:#fff; color:#111; cursor:pointer; font-weight:700;
+  background:#fff; color:#111; cursor:pointer; font-weight:800;
+  box-shadow: 0 10px 24px #0006;
 }
+#restart:active{ transform: translateY(1px); }
+
 #saveRow{ display:flex; gap:8px; align-items:center; justify-content:center; margin-top:8px; }
 #playerName{
-  padding:8px 10px; border-radius:8px; border:1px solid #444; background:#222; color:#fff; min-width:160px;
+  padding:8px 10px; border-radius:8px; border:1px solid var(--border);
+  background:#1a1f27; color:var(--text); min-width:160px;
 }
 #saveBtn{
-  padding:8px 12px; border-radius:8px; border:1px solid #2ecc71; background:#2ecc71; color:#111; font-weight:700; cursor:pointer;
+  padding:8px 12px; border-radius:8px; border:1px solid var(--accent);
+  background:var(--accent); color:#111; font-weight:800; cursor:pointer;
 }
 #saveBtn[disabled]{ opacity:.6; cursor:not-allowed; }
 
-/* Leaderboard */
+/* ===================== Leaderboard ===================== */
 #leaderboard{
-  width:min(var(--board), 95vw);
-  background:#1a1a1a; border:1px solid #2a2a2a; border-radius:12px;
-  box-shadow:0 8px 24px #0007; overflow:hidden; margin:6px 0 10px;
+  width: min(var(--board), 95vw);
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:12px;
+  box-shadow: 0 8px 28px #0007;
+  overflow:hidden; margin:6px 0 10px;
 }
 #leaderboard header{
   display:flex; justify-content:space-between; align-items:center;
-  padding:8px 10px; background:#222; border-bottom:1px solid #2f2f2f;
+  padding:8px 10px; background:var(--panel-2);
+  border-bottom:1px solid var(--border);
 }
 #leaderboard h3{ margin:0; font-size:14px; letter-spacing:.3px; }
-#lbStatus{ opacity:.8; font-size:12px; }
-#leaderboard header > div{ display:flex; gap:8px; align-items:center; }
-#toggleLB, #resetScores{
-  padding:6px 10px; border-radius:8px; cursor:pointer; font-weight:700;
-}
-#toggleLB{ border:1px solid #5dade2; background:#5dade2; color:#111; }
-#resetScores{ border:1px solid #ff7675; background:#ff7675; color:#111; }
-#resetScores:active, #toggleLB:active{ transform:translateY(1px); }
+#lbStatus{ opacity:.85; font-size:12px; }
 
 #leaderboard ol{
   list-style:none; margin:0; padding:8px 10px;
   display:grid; grid-template-columns:1fr auto; row-gap:4px;
-  max-height:24dvh; overflow:auto;
+  max-height: 18dvh; overflow:auto;
+  scrollbar-width: thin; scrollbar-color: #2f3642 #1b1f27;
 }
-#leaderboard.expanded ol{ max-height:60dvh; }
+#leaderboard.expanded ol{ max-height: 56dvh; }
 #leaderboard li{ display:contents; }
 #leaderboard .name{
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:8px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:8px; color:var(--text);
 }
-#leaderboard .score{ font-variant-numeric:tabular-nums; }
+#leaderboard .score{ font-variant-numeric: tabular-nums; color:var(--muted); }
 
-/* Sparkle particles */
+#toggleLB, #resetScores{
+  padding:6px 10px; border-radius:8px; border:1px solid var(--border);
+  background:#222831; color:var(--text); cursor:pointer; font-weight:700;
+}
+#toggleLB:active, #resetScores:active{ transform: translateY(1px); }
+#resetScores{ border-color:#ff7675; background:#ff7675; color:#111; }
+
+/* ===================== Sparkle ===================== */
 .sparkle{
   position:absolute; pointer-events:none; z-index:150;
-  width:8px; height:8px; border-radius:50%; background:#fff; opacity:.9; animation:spark .5s ease-out forwards;
+  width:8px; height:8px; border-radius:50%; background:#fff; opacity:.95;
+  animation: spark .5s ease-out forwards;
 }
 @keyframes spark{ to{ transform:translateY(-12px) scale(.2); opacity:0 } }
 
-/* Error overlay (optional; shown by JS on errors) */
+/* ===================== Error overlay (debug) ===================== */
 #errorOverlay{
-  position:fixed; inset:0; background:#1b1b1bcc; color:#fff; z-index:99999;
+  position:fixed; inset:0; background:#1b1b1bcc; color:#fff; z-index:9999;
   display:none; align-items:flex-start; justify-content:center; padding:16px; overflow:auto;
 }
 #errorOverlay pre{
-  max-width:900px; width:100%; background:#2a2a2a; border:1px solid #ff6b6b; border-radius:10px;
-  padding:12px; white-space:pre-wrap; word-break:break-word;
+  max-width:900px; width:100%; background:#2a2a2a; border:1px solid #ff6b6b;
+  border-radius:10px; padding:12px; white-space:pre-wrap; word-break:break-word
 }
 
-/* Small screens tweaks */
-@media (max-width:480px){
-  .hud{ gap:6px; }
-  .pill{ padding:5px 8px; }
+/* ===================== Small screens tweaks ===================== */
+@media (max-width: 480px){
+  h1{ font-size: 18px; }
+  .pill{ font-size: 14px; }
 }
+
+/* iOS momentum scroll inside leaderboard */
+#leaderboard ol{ -webkit-overflow-scrolling: touch; }
