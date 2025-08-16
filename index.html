@@ -1,84 +1,42 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Knight Runner</title>
+<!-- Debug overlay (already in your page; this just reuses it if present) -->
+<div id="errorOverlay" style="display:none"><pre id="errorText"></pre></div>
 
-  <!-- Main CSS (relative path; case-sensitive on GitHub Pages) -->
-  <link rel="stylesheet" href="./css/style.css?v=1">
+<!-- 1) Fallback CSS so #game is visible even if style.css fails -->
+<style id="board-fallback">
+  :root{ --board:min(92vmin,92svmin); --cell:calc(var(--board)/8); }
+  #game{ position:relative; width:var(--board); height:var(--board);
+         border:4px solid #fff; border-radius:12px; overflow:hidden; background:#222; }
+  .square{ position:absolute; width:var(--cell); height:var(--cell); }
+  .light{ background:#f0d9b5; } .dark{ background:#b58863; }
+</style>
 
-  <!-- Optional: tiny fallback so the board is visible even if CSS fails -->
-  <style id="board-fallback">
-    :root{ --board:min(92vmin,92svmin); --cell:calc(var(--board)/8); }
-    #game{ position:relative; width:var(--board); height:var(--board);
-           border:4px solid #fff; border-radius:12px; overflow:hidden; background:#222; }
-    .square{ position:absolute; width:var(--cell); height:var(--cell); }
-    .light{ background:#f0d9b5; } .dark{ background:#b58863; }
-  </style>
-</head>
-<body>
-  <h1>Knight Runner</h1>
+<!-- 2) Probe to detect if main.js runs (module load failures don’t fire window.onerror) -->
+<script>
+  window.__MAIN_LOADED__ = false;
+  function showDiag(msg){
+    const o=document.getElementById('errorOverlay'), t=document.getElementById('errorText');
+    if (!o||!t) { alert(msg); return; }
+    o.style.display='flex'; o.style.position='fixed'; o.style.inset='0';
+    o.style.background='#1b1b1bcc'; o.style.color='#fff'; o.style.zIndex='99999';
+    o.style.alignItems='flex-start'; o.style.justifyContent='center'; o.style.padding='16px';
+    t.style.maxWidth='900px'; t.style.width='100%'; t.style.background='#2a2a2a';
+    t.style.border='1px solid #ff6b6b'; t.style.borderRadius='10px'; t.style.padding='12px';
+    t.style.whiteSpace='pre-wrap'; t.style.wordBreak='break-word';
+    t.textContent = msg;
+  }
+  setTimeout(()=>{
+    if (!window.__MAIN_LOADED__) {
+      showDiag(
+        "Your module entry 'js/main.js' did not execute.\n\n" +
+        "Checklist:\n" +
+        "1) <script type='module' src='./js/main.js?v=debug1'> (note the './')\n" +
+        "2) File exists at js/main.js (case-sensitive)\n" +
+        "3) All imports include the .js extension and use './'\n" +
+        "4) Use a cache-buster in the URL: ?v=debug1"
+      );
+    }
+  }, 1200);
+</script>
 
-  <div class="hud">
-    <div class="pill">Score: <span id="score">0.0</span>s</div>
-    <div class="pill">Speed: <span id="speed">1.0×</span></div>
-    <div id="status">
-      <div class="badge" id="bShield">🛡 shield</div>
-      <div class="badge" id="bSpeed">⚡ speed</div>
-      <div class="badge" id="bSlow">🕒 slow</div>
-      <button id="muteBtn" aria-pressed="false" title="Mute/Unmute">🔊</button>
-    </div>
-  </div>
-
-  <div id="game"></div>
-
-  <div id="leaderboard">
-    <header>
-      <h3>Leaderboard (This device)</h3>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <div id="lbStatus">saved locally</div>
-        <button id="toggleLB" title="Expand/collapse">Show more</button>
-        <button id="resetScores" title="Clear saved scores">Reset Scores</button>
-      </div>
-    </header>
-    <ol id="lbList"></ol>
-  </div>
-
-  <!-- Error overlay so you never get a silent blank page -->
-  <div id="errorOverlay" style="display:none">
-    <pre id="errorText"></pre>
-  </div>
-  <script>
-    (function(){
-      const o=document.getElementById('errorOverlay'), t=document.getElementById('errorText');
-      function show(msg){ o.style.display='flex'; o.style.position='fixed'; o.style.inset='0';
-        o.style.background='#1b1b1bcc'; o.style.color='#fff'; o.style.zIndex='99999';
-        o.style.alignItems='flex-start'; o.style.justifyContent='center'; o.style.padding='16px';
-        o.style.overflow='auto';
-        t.style.maxWidth='900px'; t.style.width='100%'; t.style.background='#2a2a2a';
-        t.style.border='1px solid #ff6b6b'; t.style.borderRadius='10px'; t.style.padding='12px';
-        t.style.whiteSpace='pre-wrap'; t.style.wordBreak='break-word';
-        t.textContent='JavaScript error:\\n\\n'+msg;
-      }
-      addEventListener('error', e=>show((e.message||'Unknown error')+(e.filename? '\\n'+e.filename:'')+(e.lineno? ':'+e.lineno:'')));
-      addEventListener('unhandledrejection', e=>show('Unhandled promise: '+(e.reason && e.reason.message ? e.reason.message : String(e.reason))));
-    })();
-  </script>
-
-  <!-- Entry script: imports all other modules. Keep the relative path and the .js extension. -->
-  <script type="module" src="./js/main.js?v=1"></script>
-
-  <!-- Remove the fallback style once you confirm external CSS loads -->
-  <script>
-    // If style.css loaded, remove the inline fallback to avoid duplicate rules.
-    (function(){
-      const test = getComputedStyle(document.documentElement).getPropertyValue('--board');
-      if (test && test.trim() !== '') {
-        const fb = document.getElementById('board-fallback');
-        if (fb) fb.remove();
-      }
-    })();
-  </script>
-</body>
-</html>
+<!-- 3) Load ONE entry module (relative path + cache-buster) -->
+<script type="module" src="./js/main.js?v=debug1"></script>
