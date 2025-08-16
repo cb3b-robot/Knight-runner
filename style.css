@@ -1,0 +1,248 @@
+/* =============== Root & Globals =============== */
+:root{
+  --board: 600px;                 /* JS (sizing.js) will resize this */
+  --cell: calc(var(--board) / 8); /* 8x8 board */
+  --bg: #111;
+  --fg: #fff;
+  --light: #f0d9b5;
+  --dark:  #b58863;
+
+  --accent: #2ecc71;
+  --hint:   #00d2ff;
+  --danger: #e74c3c;
+}
+
+*{ box-sizing: border-box; }
+html, body { height: 100%; }
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  display:flex; flex-direction:column; align-items:center; gap:10px;
+  padding: env(safe-area-inset-top) 8px env(safe-area-inset-bottom);
+  overflow:hidden; /* keep the page from scrolling while playing */
+}
+
+/* =============== Title & HUD =============== */
+h1{
+  margin:6px 0 0;
+  font-size: clamp(18px, 3.8vw, 28px);
+  letter-spacing:.2px;
+}
+.hud{
+  display:flex; gap:10px; align-items:center; justify-content:center;
+  flex-wrap:wrap; font-weight:600;
+  text-shadow:0 1px 2px #0008; padding:4px 0;
+}
+.pill{
+  padding:6px 10px; border-radius:999px;
+  background:#222; border:1px solid #333;
+}
+#status{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.badge{
+  padding:4px 8px; border-radius:999px;
+  border:1px solid #444; background:#1c1c1c;
+  font-size:12px; opacity:.9;
+}
+.badge.active{ border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb, var(--accent), transparent 70%) inset; }
+#muteBtn{
+  padding:6px 10px; border-radius:999px;
+  border:1px solid #444; background:#1c1c1c; color:#fff; cursor:pointer;
+}
+
+/* =============== Game Frame =============== */
+#game{
+  position:relative;
+  width:var(--board); height:var(--board);
+  border:4px solid #fff; border-radius:12px; overflow:hidden;
+  box-shadow:0 12px 40px #0008, inset 0 0 0 1px #0006;
+  transition:transform .12s ease;
+}
+#game.shake{ animation:shake .35s ease; }
+@keyframes shake{
+  0%,100%{ transform:translate3d(0,0,0) }
+  20%   { transform:translate3d(-6px,0,0) }
+  40%   { transform:translate3d( 6px,0,0) }
+  60%   { transform:translate3d(-4px,0,0) }
+  80%   { transform:translate3d( 4px,0,0) }
+}
+
+/* =============== Chessboard Squares =============== */
+.square{
+  position:absolute;
+  width:var(--cell); height:var(--cell);
+}
+.light{ background:var(--light); }
+.dark { background:var(--dark); }
+
+/* =============== Pieces =============== */
+.piece{
+  position:absolute;
+  width:var(--cell); height:var(--cell);
+  display:flex; align-items:center; justify-content:center;
+  pointer-events:none; user-select:none;
+  line-height:1;
+}
+
+/* White knight: make it big, bright, and crisp */
+.knight{
+  z-index:110; color:#fff;
+  /* slightly larger for visibility */
+  font-size: calc(var(--cell) * 0.74);
+  text-shadow: 0 2px 6px #0009, 0 0 2px #000c;
+  transition:
+    left .18s cubic-bezier(.2,.7,.2,1),
+    top  .18s cubic-bezier(.2,.7,.2,1),
+    filter .2s ease;
+}
+.knight.danger{ filter: drop-shadow(0 0 10px var(--danger)); }
+
+/* Black enemies: keep contrast strong against board */
+.enemy{
+  z-index:90; color:#000;
+  font-size: calc(var(--cell) * 0.66);
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,.6));
+}
+
+/* =============== Power-ups =============== */
+.power{
+  position:absolute; z-index:80;
+  width:var(--cell); height:var(--cell);
+  display:flex; align-items:center; justify-content:center;
+  pointer-events:none;
+}
+.power .glyph{
+  font-size: calc(var(--cell) * 0.40);
+  filter: drop-shadow(0 2px 4px #0008);
+}
+.power .ring{
+  position:absolute;
+  width: calc(var(--cell) * 0.36);
+  height: calc(var(--cell) * 0.36);
+  border-radius:50%;
+  box-shadow: 0 0 0 3px #fff6 inset, 0 0 10px #fff6;
+}
+.power.fade{ animation: fadeout .45s forwards; }
+@keyframes fadeout{ to{ opacity:0; transform:scale(.9) } }
+
+/* =============== Knight Move Dots (click to move) =============== */
+.dot{
+  position:absolute; z-index:120;
+  width:var(--cell); height:var(--cell);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer;
+}
+.dot span{
+  width: calc(var(--cell) * 0.24);
+  height: calc(var(--cell) * 0.24);
+  border-radius:50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent), transparent 70%),
+              0 2px 6px #0007;
+}
+.dot:active span{ transform: scale(.92); }
+
+/* =============== SVG Arrow Guide =============== */
+#guideLayer{
+  position:absolute; inset:0; pointer-events:none; z-index:140;
+}
+.ga-primary{
+  stroke: var(--accent); stroke-width:8; fill:none;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.6));
+}
+.ga-hint{
+  stroke: var(--hint); stroke-width:6; fill:none; stroke-dasharray:10 8;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.5));
+}
+.ga-invalid{ stroke: var(--danger); opacity:.65; }
+.ga-label{
+  font: 600 14px/1 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  fill:#fff; paint-order: stroke;
+  stroke:#000; stroke-width:3px;
+}
+
+/* =============== Game Over Overlay =============== */
+#over{
+  position:absolute; inset:0;
+  background: rgba(0,0,0,.55);
+  display:none; align-items:center; justify-content:center; flex-direction:column;
+  z-index:200; text-align:center; padding:20px;
+}
+#over h2{ margin:0 0 8px; font-size:clamp(20px,5vw,36px); }
+#over p { margin:0 0 12px; opacity:.9; }
+#restart{
+  padding:10px 14px; border-radius:10px;
+  border:1px solid #fff4; background:#fff; color:#111; cursor:pointer; font-weight:700;
+}
+#saveRow{
+  display:flex; gap:8px; align-items:center; justify-content:center; margin-top:8px;
+}
+#playerName{
+  padding:8px 10px; border-radius:8px; border:1px solid #444; background:#222; color:#fff; min-width:160px;
+}
+#saveBtn{
+  padding:8px 12px; border-radius:8px; border:1px solid var(--accent);
+  background:var(--accent); color:#111; font-weight:700; cursor:pointer;
+}
+#saveBtn[disabled]{ opacity:.6; cursor:not-allowed; }
+
+/* =============== Leaderboard =============== */
+#leaderboard{
+  width: min(var(--board), 95vw);
+  background:#1a1a1a; border:1px solid #2a2a2a; border-radius:12px;
+  box-shadow:0 8px 24px #0007; overflow:hidden; margin:6px 0 10px;
+}
+#leaderboard header{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:8px 10px; background:#222; border-bottom:1px solid #2f2f2f;
+}
+#leaderboard h3{ margin:0; font-size:14px; letter-spacing:.3px; }
+#lbStatus{ opacity:.8; font-size:12px; }
+#leaderboard ol{
+  list-style:none; margin:0; padding:8px 10px;
+  display:grid; grid-template-columns:1fr auto; row-gap:4px;
+  max-height: 22dvh; overflow:auto;  /* collapsed height */
+}
+#leaderboard.expanded ol{ max-height: 48dvh; } /* “Show more” doubles the height */
+#leaderboard li{ display:contents; }
+#leaderboard .name{
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:8px;
+}
+#leaderboard .score{ font-variant-numeric: tabular-nums; }
+#toggleLB, #resetScores{
+  padding:6px 10px; border-radius:8px; cursor:pointer; font-weight:700;
+}
+#toggleLB{
+  border:1px solid #6c9; background:#102; color:#cfe;
+}
+#resetScores{
+  border:1px solid #ff7675; background:#ff7675; color:#111;
+}
+#resetScores:active{ transform: translateY(1px); }
+
+/* =============== Sparkle FX =============== */
+.sparkle{
+  position:absolute; pointer-events:none; z-index:150;
+  width:8px; height:8px; border-radius:50%; background:#fff; opacity:.9;
+  animation:spark .5s ease-out forwards;
+}
+@keyframes spark{ to{ transform:translateY(-12px) scale(.2); opacity:0 } }
+
+/* =============== Error Overlay (fallback if you keep it here too) =============== */
+#errorOverlay{
+  position:fixed; inset:0; background:#1b1b1bcc; color:#fff; z-index:9999;
+  display:none; align-items:flex-start; justify-content:center; padding:16px; overflow:auto;
+}
+#errorOverlay pre{
+  max-width:900px; width:100%;
+  background:#2a2a2a; border:1px solid #ff6b6b; border-radius:10px;
+  padding:12px; white-space:pre-wrap; word-break:break-word;
+}
+
+/* =============== Small tweaks for narrow screens =============== */
+@media (max-width: 420px){
+  .pill{ font-size:14px; padding:5px 8px; }
+  #leaderboard header{ flex-direction:column; gap:6px; align-items:flex-start; }
+}
+
+/* Prefer no text selection while playing */
+::selection{ background:#fff2; }
