@@ -1,7 +1,16 @@
 // js/main.js
 console.log('[main] boot');
 
-// ---- Imports (filenames/case must match your repo exactly) ----
+// Visual canary so you know main.js ran
+(() => {
+  const tag = document.createElement('div');
+  tag.textContent = 'main.js loaded';
+  tag.style.cssText = 'position:fixed;top:8px;left:8px;background:#2ecc71;color:#111;padding:4px 6px;border-radius:6px;font:600 12px system-ui;z-index:9999';
+  document.body.appendChild(tag);
+  setTimeout(() => tag.remove(), 1500);
+})();
+
+// ---- Imports (filenames/case must match exactly) ----
 import { els, state, CELL } from './state.js';
 import { installSizing } from './sizing.js';
 import { buildBoard, updateDots, relayoutAll } from './board.js';
@@ -10,66 +19,56 @@ import { installControls } from './controls.js';
 import { spawnEnemyOrPower, stepEnemies } from './enemies.js';
 import { installLeaderboard, addScore, renderLeaderboard } from './leaderboard.js';
 
-// Optional: tiny on-screen badge so you know main.js ran
-(() => {
-  const tag = document.createElement('div');
-  tag.textContent = 'main.js loaded';
-  tag.style.cssText = 'position:fixed;top:8px;left:8px;background:#2ecc71;color:#111;padding:4px 6px;border-radius:6px;font:600 12px system-ui;z-index:9999';
-  document.body.appendChild(tag);
-  setTimeout(() => tag.remove(), 1600);
-})();
-
-// Reuse the error overlay that exists in index.html
+// Reuse the error overlay
 function showError(msg){
   const o=document.getElementById('errorOverlay'), t=document.getElementById('errorText');
   if (!o || !t) { console.error(msg); return; }
   o.style.display='flex'; t.textContent = 'JavaScript error:\n\n' + msg;
 }
 
-// ---- Bootstrap ----
 try {
-  // Layout and UI
-  installSizing();          // sets --board based on viewport (iPad-friendly)
-  buildBoard();             // draws the 8x8 squares and knight
-  setupGuide();             // SVG arrows for the two-step input
-  installControls();        // keyboard controls (two-step L-move)
-  installLeaderboard();     // local leaderboard + show more/less
-  updateDots();             // show knight move dots immediately
+  // Layout & UI
+  installSizing();
+  buildBoard();
+  setupGuide();
+  installControls();
+  installLeaderboard();
+  updateDots();
 
-  // Resize-aware relayout (keeps pieces perfectly aligned when device rotates)
+  // Resize-aware relayout
   let lastCell = CELL();
   if (window.ResizeObserver){
     new ResizeObserver(() => {
       const newCell = CELL();
-      relayoutAll(lastCell);  // rescales/enemy/powerup positions + dots + guide viewBox
+      relayoutAll(lastCell);
       lastCell = newCell;
     }).observe(els.game);
   }
 
-  // ---- Spawning & difficulty scaling ----
+  // Spawning & difficulty
   function scheduleSpawn(){
-    const baseSpawnDelay = 1500; // ms
-    const next = Math.max(60, baseSpawnDelay / (state.speedMult * (state.slowFactor || 1)));
+    const baseSpawnDelay = 1500;
+    const mult = state.speedMult * (state.slowFactor || 1);
+    const next = Math.max(60, baseSpawnDelay / mult);
     state.timers = state.timers || {};
     state.timers.spawn = setTimeout(function tick(){
       if (!state.running) return;
-      spawnEnemyOrPower();  // 88% enemy / 12% power-up (set in enemies/powerups modules)
+      spawnEnemyOrPower();
       scheduleSpawn();
     }, next);
   }
-
   function scheduleDifficulty(){
     state.timers = state.timers || {};
     state.timers.diff = setInterval(() => {
       if (!state.running) return;
-      state.speedMult += 0.4; // increases every 6s
+      state.speedMult += 0.4;
       els.speed.textContent = (state.speedMult * (state.slowFactor || 1)).toFixed(1) + '×';
       clearTimeout(state.timers.spawn);
       scheduleSpawn();
     }, 6000);
   }
 
-  // ---- Game over flow (called by other modules via window.__gameOver) ----
+  // Game over flow (called by other modules as window.__gameOver())
   window.__gameOver = function(){
     if (!state.running) return;
     state.running = false;
@@ -109,11 +108,11 @@ try {
     restartBtn.addEventListener('click', () => location.reload());
   };
 
-  // ---- Main loop ----
+  // Main loop
   function loop(ts){
     if (!state.running) return;
     const dt = ts - state.lastTime; state.lastTime = ts;
-    stepEnemies(dt); // smooth enemy/powerup updates + collisions
+    stepEnemies(dt);
     els.score.textContent = ((ts - state.startTime) / 1000).toFixed(1);
     requestAnimationFrame(loop);
   }
