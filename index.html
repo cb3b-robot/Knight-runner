@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Knight Runner — KR-2025-08-15-k3</title>
+<title>Knight Runner — KR-2025-08-15-k4</title>
 <style>
 :root{
   --board:600px;
@@ -35,6 +35,11 @@ button,input{font-size:16px}
   border:4px solid #fff;border-radius:12px;overflow:hidden;
   box-shadow:0 12px 40px #0008,inset 0 0 0 1px #0006;
   transition:transform .12s ease;
+
+  /* Fallback painted chessboard, shows even if tiles fail to position on first paint */
+  background:
+    conic-gradient(#b58863 0 25%, #f0d9b5 0 50%, #b58863 0 75%, #f0d9b5 0)
+      0 0/ calc(var(--cell)*2) calc(var(--cell)*2);
 }
 #game.shake{animation:shake .35s ease;}
 @keyframes shake{0%,100%{transform:translate3d(0,0,0)}20%{transform:translate3d(-6px,0,0)}40%{transform:translate3d(6px,0,0)}60%{transform:translate3d(-4px,0,0)}80%{transform:translate3d(4px,0,0)}}
@@ -54,7 +59,7 @@ button,input{font-size:16px}
   line-height:1;
 }
 .knight{
-  z-index:110;color:#fff;
+  z-index:110;color:#fff; /* solid white ♞ look */
   font-size: calc(var(--cell) * var(--knight-scale));
   -webkit-text-stroke: 0.5px rgba(0,0,0,.35);
   text-shadow:0 2px 6px #0009;
@@ -153,7 +158,7 @@ button,input{font-size:16px}
 <div id="game"></div>
 
 <!-- Local Leaderboard -->
-<div id="leaderboard" class="">
+<div id="leaderboard">
   <header>
     <h3>Leaderboard (This device)</h3>
     <div style="display:flex; gap:8px; align-items:center;">
@@ -206,7 +211,7 @@ button,input{font-size:16px}
     const hudH   = rectH(hud);
     const padV   = bodyVPad();
 
-    const gaps = 64;
+    const gaps = 64; /* breathing room for iOS bars */
     const maxByHeight = Math.max(240, vh - titleH - hudH - padV - gaps);
     const maxByWidth  = Math.max(240, vw - 16);
     const size = Math.floor(Math.min(maxByHeight, maxByWidth));
@@ -348,10 +353,13 @@ button,input{font-size:16px}
   let spawnTimer, difficultyTimer;
   let startTime = performance.now(), lastTime  = startTime;
 
+  /* ===== Build board (IMMEDIATE POSITION to avoid stacking at 0,0) ===== */
   for (let y=0;y<SIZE;y++){
     for (let x=0;x<SIZE;x++){
       const sq = document.createElement('div');
       sq.className = 'square ' + ((x+y)%2 ? 'dark' : 'light');
+      sq.style.left = (x * CELL()) + 'px';
+      sq.style.top  = (y * CELL()) + 'px';
       game.appendChild(sq);
     }
   }
@@ -392,7 +400,7 @@ button,input{font-size:16px}
     prim.setAttribute('class','ga-primary' + (bad ? ' ga-invalid' : ''));
     prim.setAttribute('marker-end', `url(#${bad?'headInvalid':'headPrimary'})`);
     guide.appendChild(prim);
-    const label = document.createElementNS(svgNS,'text');
+    const label = document.createElementNS(svgNS, 'text');
     label.setAttribute('x', ex + (dir.x===1? 10 : dir.x===-1? -10 : 0));
     label.setAttribute('y', ey + (dir.y===1? 18 : dir.y===-1? -10 : -12));
     label.setAttribute('text-anchor', dir.x===-1 ? 'end' : 'start');
@@ -429,7 +437,7 @@ button,input{font-size:16px}
     }
   }
 
-  /* Power-ups, enemies, movement... (unchanged from k2) */
+  /* Power-ups */
   const POWER_TYPES = ['shield','speed','slow','clear'];
   const POWER_GLYPH = { shield:'🛡', speed:'⚡', slow:'🕒', clear:'💥' };
   function spawnPowerUp(){
@@ -477,6 +485,7 @@ button,input{font-size:16px}
     }
   }
 
+  /* Enemies */
   const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 };
   function spawnEnemy(){
     const r=Math.random();
@@ -493,4 +502,251 @@ button,input{font-size:16px}
     if (type==='bishop'){
       const dirX=(Math.random()<0.5)?-1:1;
       const e={el,type,px,py,bx:x,by:y,bdir:dirX,btx:x+dirX,bty:0,btpX:(x+dirX)*CELL(),btpY:0,stepSpeed:BASE_SPEED.bishop};
-      if (e.btx<0||e.btx>=SIZE){ e.bdir=-e.bdir; e.btx=e
+      if (e.btx<0||e.btx>=SIZE){ e.bdir=-e.bdir; e.btx=e.bx+e.bdir; e.btpX=e.btx*CELL(); }
+      el.style.left=px+'px'; el.style.top=py+'px'; enemies.push(e); return;
+    }
+    let vxCells=0, vyCells=BASE_SPEED[type];
+    if (type==='rook'){ vxCells=0; vyCells=BASE_SPEED.rook; }
+    const e={el,type,px,py,vxCells,vyCells}; el.style.left=px+'px'; el.style.top=py+'px'; enemies.push(e);
+  }
+  function pickNextQueenTarget(e){
+    const cx=e.qx, cy=e.qy, ny=cy+1; const options=[];
+    for (let di=-1; di<=1; di++){ const nx=cx+di; if (nx>=0&&nx<SIZE) options.push(nx); }
+    const nx = options.length ? options[Math.floor(Math.random()*options.length)] : cx;
+    e.qtx=nx; e.qty=ny;
+  }
+  function pickNextBishopTarget(e){
+    const cx=e.bx, cy=e.by; let nx=cx+e.bdir; const ny=cy+1;
+    if (nx<0||nx>=SIZE){ e.bdir=-e.bdir; nx=cx+e.bdir; }
+    e.btx=nx; e.bty=ny;
+  }
+
+  /* Difficulty / spawn */
+  const baseSpawnDelay=1500;
+  function scheduleSpawn(){
+    const next=Math.max(60, baseSpawnDelay / (speedMult*(slowFactor||1)));
+    spawnTimer=setTimeout(function tick(){
+      if (!running) return;
+      (Math.random()<0.12 ? spawnPowerUp : spawnEnemy)();
+      scheduleSpawn();
+    }, next);
+  }
+  function scheduleDifficulty(){
+    difficultyTimer=setInterval(()=>{
+      if (!running) return;
+      speedMult += 0.4;
+      speedEl.textContent = (speedMult*(slowFactor||1)).toFixed(1)+'×';
+      clearTimeout(spawnTimer);
+      scheduleSpawn();
+    }, 6000);
+  }
+
+  /* Movement & collision */
+  function moveEnemiesSmooth(dt){
+    const dtSec=dt/1000, nowT=performance.now();
+    for (let i=powerups.length-1;i>=0;i--){
+      if (nowT>powerups[i].expiresAt){ powerups[i].el.classList.add('fade'); setTimeout(()=>powerups[i].el && powerups[i].el.remove(),450); powerups.splice(i,1); }
+    }
+    if (slowUntil && nowT>slowUntil){ slowUntil=0; slowFactor=1.0; bSlow.classList.remove('active'); }
+    speedEl.textContent = (speedMult*(slowFactor||1)).toFixed(1)+'×';
+    const mult=speedMult*(slowFactor||1);
+
+    for (let i=enemies.length-1;i>=0;i--){
+      const e=enemies[i];
+      if (e.type==='queen'){
+        const speedPx=e.stepSpeed*CELL()*mult;
+        const dx=e.qtpX-e.px, dy=e.qtpY-e.py;
+        const dist=Math.hypot(dx,dy); const step=speedPx*dtSec;
+        if (dist<=step || dist===0){
+          e.px=e.qtpX; e.py=e.qtpY; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
+          e.qx=e.qtx; e.qy=e.qty;
+          if (e.qy>=SIZE){ e.el.remove(); enemies.splice(i,1); continue; }
+          pickNextQueenTarget(e); e.qtpX=e.qtx*CELL(); e.qtpY=e.qty*CELL();
+        }else{
+          const ux=dx/dist, uy=dy/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
+        }
+      } else if (e.type==='bishop'){
+        const speedPx=e.stepSpeed*CELL()*mult;
+        const dx=e.btpX-e.px, dy=e.btpY-e.py; const dist=Math.hypot(dx,dy); const step=speedPx*dtSec;
+        if (dist<=step || dist===0){
+          e.px=e.btpX; e.py=e.btpY; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
+          e.bx=e.btx; e.by=e.bty;
+          if (e.by>=SIZE){ e.el.remove(); enemies.splice(i,1); continue; }
+          pickNextBishopTarget(e); e.btpX=e.btx*CELL(); e.btpY=e.bty*CELL();
+        }else{
+          const ux=dx/dist, uy=dy/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
+        }
+      } else {
+        const vx=(e.vxCells||0)*CELL()*mult, vy=(e.vyCells||0)*CELL()*mult;
+        e.px=Math.max(0, Math.min((SIZE-1)*CELL(), e.px + vx*dtSec)); e.py+=vy*dtSec;
+        e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
+      }
+
+      const ex=Math.round(e.px/CELL()), ey=Math.round(e.py/CELL());
+      if (ex===knight.x && ey===knight.y){
+        if (shield>0){ shield=0; bShield.classList.remove('active'); e.el.remove(); enemies.splice(i,1); game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'),220); SFX.shieldHit(); }
+        else { gameOver(); return; }
+      }
+      if (e.py>SIZE*CELL()){ e.el.remove(); enemies.splice(i,1); }
+    }
+
+    // danger glow
+    let danger=false;
+    const neigh = [{x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},{x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}];
+    for (let j=0;j<neigh.length;j++){
+      const o=neigh[j]; const tx=knight.x+o.x, ty=knight.y+o.y;
+      if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) continue;
+      if (enemies.some(e=>Math.round(e.px/CELL())===tx && Math.round(e.py/CELL())===ty)){ danger=true; break; }
+    }
+    knightEl.classList.toggle('danger', danger);
+  }
+  function checkCollision(){
+    const hit = enemies.some(e=>Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y);
+    if (hit){
+      if (shield>0){ shield=0; bShield.classList.remove('active'); enemies=enemies.filter(e=>!(Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y)); SFX.shieldHit(); }
+      else gameOver();
+    }
+  }
+
+  function moveKnightTo(tx,ty){
+    if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) return;
+    knight.x = clampCell(tx); knight.y = clampCell(ty); placeKnight();
+    SFX.jump(); pickupAt(knight.x,knight.y); checkCollision(); updateDots(); clearGuide();
+    if (speedMoves>0){ speedMoves--; if (speedMoves===0) bSpeed.classList.remove('active'); }
+  }
+
+  /* Loop */
+  function loop(now){
+    if (!running) return;
+    const dt=now-lastTime; lastTime=now;
+    moveEnemiesSmooth(dt);
+    scoreEl.textContent=((now-startTime)/1000).toFixed(1);
+    requestAnimationFrame(loop);
+  }
+
+  /* Two-step arrow */
+  const DIRS = { up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
+  let arrowStep=0, firstArrow=null;
+  function processArrow(dir){
+    if (arrowStep===0){
+      const tx2=knight.x + dir.x*2, ty2=knight.y + dir.y*2;
+      const inside = (tx2>=0 && tx2<SIZE && ty2>=0 && ty2<SIZE);
+      if (!inside){ drawFirstArrow(dir, true); return; }
+      firstArrow=dir; arrowStep=1; drawFirstArrow(dir, false); return;
+    }
+    const dx2=firstArrow.x*2, dy2=firstArrow.y*2;
+    let tx=knight.x, ty=knight.y;
+    if (firstArrow.x!==0 && dir.y!==0){ tx+=dx2; ty+=dir.y; }
+    else if (firstArrow.y!==0 && dir.x!==0){ tx+=dir.x; ty+=dy2; }
+    else if (firstArrow.x===-dir.x && firstArrow.y===-dir.y){ arrowStep=0; firstArrow=null; clearGuide(); return; }
+    else { arrowStep=0; firstArrow=null; clearGuide(); return; }
+    if (tx<0||tx>=SIZE||ty<0||ty>=SIZE){ arrowStep=0; firstArrow=null; clearGuide(); return; }
+    arrowStep=0; firstArrow=null; clearGuide(); moveKnightTo(tx,ty);
+  }
+  document.addEventListener('keydown', (e)=>{
+    if (!running) return;
+    const k=e.key.replace('Arrow','').toLowerCase();
+    const dir=DIRS[k]; if (!dir) return;
+    e.preventDefault(); processArrow(dir);
+  });
+
+  /* Game over / restart */
+  function gameOver(){
+    if (!running) return;
+    running=false; clearTimeout(spawnTimer); clearInterval(difficultyTimer);
+    dots.forEach(d=>d.remove()); dots=[]; clearGuide();
+    game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'),350);
+    SFX.gameOver(); Music.stop();
+
+    const over=document.createElement('div'); over.id='over';
+    const finalScore=parseFloat(scoreEl.textContent)||0;
+    over.innerHTML=
+      '<h2>Game Over</h2>'+
+      '<p>You survived <strong>'+finalScore.toFixed(1)+'s</strong></p>'+
+      '<div id="saveRow">'+
+        '<input id="playerName" maxlength="16" placeholder="Your name">'+
+        '<button id="saveBtn">Save Score</button>'+
+      '</div>'+
+      '<button id="restart">Play Again</button>';
+    game.appendChild(over); over.style.display='flex';
+
+    const nameInput=over.querySelector('#playerName');
+    const saveBtn=over.querySelector('#saveBtn');
+    const restartBtn=over.querySelector('#restart');
+    const lastName=(function(){ try{return localStorage.getItem('knightRunner_lastName')||'';}catch(e){return '';} })();
+    if (lastName) nameInput.value=lastName;
+
+    saveBtn.addEventListener('click', ()=>{
+      const name=(nameInput.value||'Player').trim();
+      try{ localStorage.setItem('knightRunner_lastName', name); }catch(e){}
+      addScore(name, finalScore);
+      saveBtn.disabled=true; renderLeaderboard(name, finalScore);
+      setBoardSize();
+    });
+    restartBtn.addEventListener('click', restart);
+  }
+  function restart(){
+    enemies.forEach(e=>e.el.remove()); enemies=[];
+    powerups.forEach(p=>p.el && p.el.remove()); powerups=[];
+    const over=document.getElementById('over'); if (over) over.remove();
+    speedMult=1.0; slowFactor=1.0; slowUntil=0; shield=0; speedMoves=0;
+    bShield.classList.remove('active'); bSpeed.classList.remove('active'); bSlow.classList.remove('active');
+    speedEl.textContent='1.0×';
+    knight={x:3, y:6}; placeKnight();
+    startTime=performance.now(); lastTime=startTime;
+    arrowStep=0; firstArrow=null; clearGuide();
+    running=true; updateDots(); clearTimeout(spawnTimer); clearInterval(difficultyTimer);
+    scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
+    SFX.restart(); Music.start();
+  }
+
+  /* Layout sync */
+  function layoutAll(scaleFrom){
+    const cell=CELL();
+    const squares=document.querySelectorAll('.square');
+    squares.forEach((sq,i)=>{ const x=i%SIZE, y=(i/SIZE)|0; sq.style.left=(x*cell)+'px'; sq.style.top=(y*cell)+'px'; });
+    placeKnight();
+    if (scaleFrom && scaleFrom>0){
+      const s=cell/scaleFrom;
+      enemies.forEach(e=>{
+        e.px*=s; e.py*=s; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
+        if (e.qtpX!=null){ e.qtpX*=s; e.qtpY*=s; }
+        if (e.btpX!=null){ e.btpX*=s; e.btpY*=s; }
+      });
+      powerups.forEach(p=>{ p.el.style.left=(p.x*cell)+'px'; p.el.style.top=(p.y*cell)+'px'; });
+      updateDots();
+    }
+    guide.setAttribute('viewBox', '0 0 ' + (cell*SIZE) + ' ' + (cell*SIZE));
+  }
+  let lastCell = CELL();
+  layoutAll();
+
+  if (window.ResizeObserver){
+    const ro = new ResizeObserver(()=>{
+      const newCell = CELL();
+      layoutAll(lastCell);
+      lastCell = newCell;
+    });
+    ro.observe(game);
+  }
+
+  /* Leaderboard expand/collapse */
+  const lb = document.getElementById('leaderboard');
+  const toggleBtn = document.getElementById('toggleLB');
+  toggleBtn.addEventListener('click', ()=>{
+    lb.classList.toggle('expanded');
+    toggleBtn.textContent = lb.classList.contains('expanded') ? 'Show less' : 'Show more';
+    setBoardSize(); // keep board sized nicely when layout changes
+  });
+
+  if (window.MutationObserver && lb){
+    new MutationObserver(()=>setBoardSize()).observe(lb, {childList:true, subtree:true, attributes:true});
+  }
+
+  /* Start */
+  updateDots(); scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
+  applyMuteUI();
+})();
+</script>
+</body>
+</html>
