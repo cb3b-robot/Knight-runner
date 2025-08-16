@@ -1,9 +1,8 @@
 // js/main.js — Knight Runner (single-file build; no imports needed)
-// Includes inline board sizing so the chessboard appears even if CSS is missing.
-// Fixes "unexpected '=' after dur" by avoiding default destructuring params.
+// Renders the board/pieces even without CSS (inline sizing/styles)
+// Fixes "unexpected '=' after dur" by avoiding destructured defaults.
 
 'use strict';
-window.__MAIN_LOADED__ = true;
 console.log('[Knight Runner] main.js loaded');
 
 /* ===================== DOM refs ===================== */
@@ -48,7 +47,6 @@ function setBoardVars(){
 /* ===================== Responsive sizing ===================== */
 function installSizing(){
   function setBoardSize(){
-    // Ensure board has a reasonable size even with no CSS
     const vh = window.innerHeight || document.documentElement.clientHeight;
     const vw = window.innerWidth  || document.documentElement.clientWidth;
     const hudH = HUD_HEIGHT();
@@ -81,7 +79,7 @@ function unlockAudio(){
 }
 function now(){ ensureAudio(); return audio.ctx.currentTime; }
 
-// ✅ FIXED: no default params in destructuring — use an opts object with inside defaults
+// ✅ No destructured defaults — older engines safe.
 function tone(opts){
   if (!audio.enabled) return;
   opts = opts || {};
@@ -128,7 +126,6 @@ const SFX = {
   restart(){ tone({freq:660,type:'triangle',gain:0.05,attack:0.003,release:0.12, slideTo:880, slideTime:0.08}); }
 };
 
-// ✅ FIXED: playNote/ playPad also avoid destructuring defaults
 const Music = (() => {
   let master, padGain, arpGain, delay, feedback, lowpass, timer=null, step=0, playing=false;
   function init(){
@@ -279,7 +276,14 @@ function buildBoard(){
 }
 
 /* ===================== Knight, Dots & Guide ===================== */
-const GLYPHS = { knight:'\u2658\uFE0E', pawn:'\u265F\uFE0E', rook:'\u265C\uFE0E', bishop:'\u265D\uFE0E', queen:'\u265B\uFE0E' }; // ♘ ♟ ♜ ♝ ♛
+/* Use black Knight glyph (♞) colored white so it's "filled". */
+const GLYPHS = {
+  knight:'\u265E\uFE0E', // ♞
+  pawn:'\u265F\uFE0E',   // ♟
+  rook:'\u265C\uFE0E',   // ♜
+  bishop:'\u265D\uFE0E', // ♝
+  queen:'\u265B\uFE0E'   // ♛
+};
 let state = {
   running: true,
   startTime: performance.now(),
@@ -296,10 +300,28 @@ let state = {
 };
 const knightEl = document.createElement('div');
 knightEl.className = 'piece knight';
-knightEl.textContent = GLYPHS.knight; // white knight (filled)
+knightEl.textContent = GLYPHS.knight;
 els.game.appendChild(knightEl);
+function styleKnightInline(){
+  const c = CELL();
+  Object.assign(knightEl.style, {
+    position: 'absolute',
+    width: c + 'px',
+    height: c + 'px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: (c * 0.86) + 'px',
+    color: '#fff',
+    textShadow: '0 2px 6px rgba(0,0,0,0.7)',
+    zIndex: '110',
+    pointerEvents: 'none',
+    userSelect: 'none'
+  });
+}
 function placeKnight(){
   const c = CELL();
+  styleKnightInline();
   knightEl.style.left = (state.knight.x*c)+'px';
   knightEl.style.top  = (state.knight.y*c)+'px';
 }
@@ -337,15 +359,242 @@ function updateDots(){
   for (const o of knightOffsets){
     const tx=state.knight.x+o.x, ty=state.knight.y+o.y;
     if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) continue;
-    const dot=document.createElement('div'); dot.className='dot';
-    dot.style.position = 'absolute';
-    dot.style.left=(tx*cell)+'px'; dot.style.top=(ty*cell)+'px';
-    dot.style.width=cell+'px'; dot.style.height=cell+'px';
-    const inner=document.createElement('span'); dot.appendChild(inner);
+
+    const dot=document.createElement('div');
+    dot.className='dot';
+    Object.assign(dot.style, {
+      position: 'absolute',
+      left: (tx*cell)+'px',
+      top:  (ty*cell)+'px',
+      width: cell+'px',
+      height: cell+'px',
+      zIndex: '120',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    });
+
+    const inner=document.createElement('span');
+    Object.assign(inner.style, {
+      width: (cell*0.24)+'px',
+      height: (cell*0.24)+'px',
+      borderRadius: '50%',
+      background: '#2ecc71',
+      boxShadow: '0 0 0 3px rgba(46,204,113,0.27), 0 2px 6px rgba(0,0,0,0.44)'
+    });
+    dot.appendChild(inner);
+
     dot.addEventListener('click', ()=> moveKnightTo(tx,ty));
+
     els.game.appendChild(dot); dots.push(dot);
   }
 }
+
+/* ===================== Power-ups ===================== */
+const POWER_TYPES = ['shield','speed','slow','clear'];
+const POWER_GLYPH = { shield:'🛡', speed:'⚡', slow:'🕒', clear:'💥' };
+
+function spawnPowerUp(){
+  let tries = 20;
+  const cell = CELL();
+  while (tries-- > 0){
+    const x = Math.floor(Math.random()*SIZE);
+    const y = Math.floor(Math.random()*(SIZE-1));
+    if (x === state.knight.x && y === state.knight.y) continue;
+    if (state.enemies.some(e => Math.round(e.px/cell) === x && Math.round(e.py/cell) === y)) continue;
+
+    const type = POWER_TYPES[Math.floor(Math.random()*POWER_TYPES.length)];
+    const el = document.createElement('div');
+    el.className = 'power';
+    Object.assign(el.style, {
+      position:'absolute',
+      left: (x*cell)+'px',
+      top:  (y*cell)+'px',
+      width: cell+'px',
+      height: cell+'px',
+      zIndex: '80',
+      display:'flex',
+      alignItems:'center',
+      justifyContent:'center',
+      pointerEvents:'none'
+    });
+    el.innerHTML = `<div class="glyph">${POWER_GLYPH[type]}</div><div class="ring"></div>`;
+    els.game.appendChild(el);
+
+    const expiresAt = performance.now() + 5500;
+    state.powerups.push({ el, type, x, y, expiresAt });
+    SFX.spawnPower();
+    break;
+  }
+}
+function pickupAt(x,y){
+  for (let i = state.powerups.length - 1; i >= 0; i--){
+    const p = state.powerups[i];
+    if (p.x === x && p.y === y){
+      applyPower(p.type, x, y);
+      if (p.el){ p.el.classList.add('fade'); setTimeout(()=>p.el && p.el.remove(), 450); }
+      state.powerups.splice(i, 1);
+    }
+  }
+}
+function applyPower(type,x,y){
+  sparkle(x,y);
+  if (type === 'shield'){ state.shield = 1; els.bShield && els.bShield.classList.add('active'); SFX.pickupShield(); }
+  if (type === 'speed'){ state.speedMoves = 3; els.bSpeed  && els.bSpeed.classList.add('active'); SFX.pickupSpeed(); }
+  if (type === 'slow'){  state.slowUntil = performance.now()+5000; state.slowFactor = 0.5; els.bSlow && els.bSlow.classList.add('active'); SFX.pickupSlow(); }
+  if (type === 'clear'){ state.enemies.forEach(e=>e.el.remove()); state.enemies = []; SFX.pickupClear(); }
+}
+function sparkle(x,y){
+  const cell = CELL();
+  for (let i=0;i<6;i++){
+    const s = document.createElement('div');
+    s.className = 'sparkle';
+    s.style.left = `${x*cell + cell*0.37 + Math.random()*cell*0.26}px`;
+    s.style.top  = `${y*cell + cell*0.37 + Math.random()*cell*0.26}px`;
+    s.style.background = i%2? '#2ecc71' : '#fff';
+    els.game.appendChild(s);
+    setTimeout(()=>s.remove(), 600);
+  }
+}
+
+/* ===================== Enemies ===================== */
+const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 }; // cells/sec
+function spawnEnemy(){
+  const r=Math.random();
+  const type = (r>0.85)?'queen' : (r>0.65)?'rook' : (r>0.40)?'bishop' : 'pawn';
+  const x=Math.floor(Math.random()*SIZE), y=-1;
+
+  const c = CELL();
+  const el=document.createElement('div');
+  el.className='piece enemy';
+  el.textContent=GLYPHS[type];
+
+  // Inline styles so they show even without CSS
+  Object.assign(el.style, {
+    position: 'absolute',
+    width: c + 'px',
+    height: c + 'px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: (c * 0.78) + 'px',
+    color: '#000',
+    filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.6))',
+    zIndex: '90',
+    pointerEvents: 'none',
+    userSelect: 'none',
+    left: (x*c) + 'px',
+    top:  (y*c) + 'px'
+  });
+
+  els.game.appendChild(el);
+
+  const px=x*c, py=y*c;
+
+  if (type==='queen'){
+    const e={el,type,px,py,qx:x,qy:y,qtx:x,qty:0,qtpX:x*c,qtpY:0,stepSpeed:BASE_SPEED.queen};
+    pickNextQueenTarget(e); e.qtpX=e.qtx*c; e.qtpY=e.qty*c;
+    state.enemies.push(e); return;
+  }
+  if (type==='bishop'){
+    const dirX=(Math.random()<0.5)?-1:1;
+    const e={el,type,px,py,bx:x,by:y,bdir:dirX,btx:x+dirX,bty:0,btpX:(x+dirX)*c,btpY:0,stepSpeed:BASE_SPEED.bishop};
+    if (e.btx<0||e.btx>=SIZE){ e.bdir=-e.bdir; e.btx=e.bx+e.bdir; e.btpX=e.btx*c; }
+    state.enemies.push(e); return;
+  }
+  // pawns/rooks
+  const vxCells=0;
+  const vyCells=(type==='rook')? BASE_SPEED.rook : BASE_SPEED.pawn;
+  const e={el,type,px,py,vxCells,vyCells};
+  state.enemies.push(e);
+}
+function pickNextQueenTarget(e){
+  const cx=e.qx, cy=e.qy, ny=cy+1; const options=[];
+  for (let dx=-1; dx<=1; dx++){ const nx=cx+dx; if (nx>=0&&nx<SIZE) options.push(nx); }
+  const nx=options.length? options[(Math.random()*options.length)|0] : cx; e.qtx=nx; e.qty=ny;
+}
+function pickNextBishopTarget(e){
+  const cx=e.bx, cy=e.by; let nx=cx+e.bdir; const ny=cy+1;
+  if (nx<0||nx>=SIZE){ e.bdir=-e.bdir; nx=cx+e.bdir; }
+  e.btx=nx; e.bty=ny;
+}
+function stepEnemies(dt){
+  const dtSec=dt/1000, nowT=performance.now();
+  // expire powerups (safe even if el already gone)
+  for (let i = state.powerups.length - 1; i >= 0; i--){
+    const p = state.powerups[i];
+    if (!p){ state.powerups.splice(i,1); continue; }
+    if (nowT > p.expiresAt){
+      if (p.el){ p.el.classList.add('fade'); setTimeout(()=>p.el && p.el.remove(), 450); }
+      state.powerups.splice(i,1);
+    }
+  }
+  if (state.slowUntil && nowT>state.slowUntil){ state.slowUntil=0; state.slowFactor=1.0; els.bSlow && els.bSlow.classList.remove('active'); }
+  els.speed && (els.speed.textContent = (state.speedMult*(state.slowFactor||1)).toFixed(1)+'×');
+  const mult=state.speedMult*(state.slowFactor||1);
+  const cell=CELL(), maxX=(SIZE-1)*cell;
+
+  for (let i=state.enemies.length-1;i>=0;i--){
+    const e=state.enemies[i];
+    if (e.type==='queen'){
+      const speedPx=e.stepSpeed*cell*mult, dx=e.qtpX-e.px, dy=e.qtpY-e.py;
+      const dist=Math.hypot(dx,dy), step=speedPx*dtSec;
+      if (dist<=step || dist===0){
+        e.px=e.qtpX; e.py=e.qtpY; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
+        e.qx=e.qtx; e.qy=e.qty; if (e.qy>=SIZE){ e.el.remove(); state.enemies.splice(i,1); continue; }
+        pickNextQueenTarget(e); e.qtpX=e.qtx*cell; e.qtpY=e.qty*cell;
+      }else{ const ux=dx/dist, uy=dy/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px'; }
+    } else if (e.type==='bishop'){
+      const speedPx=e.stepSpeed*cell*mult, dx=e.btpX-e.px, dy=e.btpY-e.py;
+      const dist=Math.hypot(dx,dy), step=speedPx*dtSec;
+      if (dist<=step || dist===0){
+        e.px=e.btpX; e.py=e.btpY; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
+        e.bx=e.btx; e.by=e.bty; if (e.by>=SIZE){ e.el.remove(); state.enemies.splice(i,1); continue; }
+        pickNextBishopTarget(e); e.btpX=e.btx*cell; e.btpY=e.bty*cell;
+      }else{ const ux=dx/dist, uy=dy/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px'; }
+    } else {
+      // pawns & rooks
+      const vx=(e.vxCells||0)*cell*mult, vy=(e.vyCells||0)*cell*mult;
+      let newPx = e.px + vx*dtSec; if (newPx<0) newPx=0; if (newPx>maxX) newPx=maxX;
+      e.px = newPx; e.py += vy*dtSec; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
+    }
+
+    // collision
+    const ex=Math.round(e.px/cell), ey=Math.round(e.py/cell);
+    if (ex===state.knight.x && ey===state.knight.y){
+      if (state.shield>0){ state.shield=0; els.bShield && els.bShield.classList.remove('active'); e.el.remove(); state.enemies.splice(i,1); els.game.classList.add('shake'); setTimeout(()=>els.game.classList.remove('shake'),220); SFX.shieldHit(); }
+      else { gameOver(); return; }
+    }
+    if (e.py>SIZE*cell){ e.el.remove(); state.enemies.splice(i,1); }
+  }
+
+  // danger glow if an enemy is one knight-move away
+  let danger=false;
+  for (const o of knightOffsets){
+    const tx=state.knight.x+o.x, ty=state.knight.y+o.y;
+    if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) continue;
+    if (state.enemies.some(e=>Math.round(e.px/cell)===tx && Math.round(e.py/cell)===ty)){ danger=true; break; }
+  }
+  knightEl.classList.toggle('danger', danger);
+}
+
+/* ===================== Knight movement ===================== */
+function moveKnightTo(tx,ty){
+  if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) return; // stay on board
+  state.knight.x=tx; state.knight.y=ty; placeKnight();
+  SFX.jump(); pickupAt(tx,ty); checkCollision(); updateDots(); clearGuide();
+  if (state.speedMoves>0){ state.speedMoves--; if (state.speedMoves===0 && els.bSpeed) els.bSpeed.classList.remove('active'); }
+}
+function checkCollision(){
+  const cell=CELL();
+  const hit = state.enemies.find(e => Math.round(e.px/cell)===state.knight.x && Math.round(e.py/cell)===state.knight.y);
+  if (hit){ if (state.shield>0){ state.shield=0; els.bShield && els.bShield.classList.remove('active'); hit.el.remove(); state.enemies=state.enemies.filter(e=>e!==hit); SFX.shieldHit(); } else gameOver(); }
+}
+
+// Two-step arrow keys
+const DIRS = { up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
+let arrowStep=0, firstArrow=null;
 function drawFirstArrow(dir){
   clearGuide();
   const cell = CELL();
@@ -383,166 +632,6 @@ function drawFirstArrow(dir){
     guide.appendChild(line);
   }
 }
-
-/* ===================== Power-ups ===================== */
-const POWER_TYPES = ['shield','speed','slow','clear'];
-const POWER_GLYPH = { shield:'🛡', speed:'⚡', slow:'🕒', clear:'💥' };
-function spawnPowerUp(){
-  let tries=20;
-  const cell=CELL();
-  while(tries-- >0){
-    const x=Math.floor(Math.random()*SIZE);
-    const y=Math.floor(Math.random()*(SIZE-1));
-    if (x===state.knight.x && y===state.knight.y) continue;
-    if (state.enemies.some(e => Math.round(e.px/cell)===x && Math.round(e.py/cell)===y)) continue;
-    const type = POWER_TYPES[Math.floor(Math.random()*POWER_TYPES.length)];
-    const el=document.createElement('div'); el.className='power';
-    el.style.position='absolute';
-    el.style.left=`${x*cell}px`; el.style.top=`${y*cell}px`;
-    el.style.width=cell+'px'; el.style.height=cell+'px';
-    el.innerHTML=`<div class="glyph">${POWER_GLYPH[type]}</div><div class="ring"></div>`;
-    els.game.appendChild(el);
-    const expiresAt=performance.now()+5500;
-    state.powerups.push({el,type,x,y,expiresAt});
-    SFX.spawnPower();
-    break;
-  }
-}
-function pickupAt(x,y){
-  for (let i=state.powerups.length-1;i>=0;i--){
-    const p=state.powerups[i];
-    if (p.x===x && p.y===y){
-      applyPower(p.type,x,y);
-      p.el.classList.add('fade'); setTimeout(()=>p.el.remove(),450);
-      state.powerups.splice(i,1);
-    }
-  }
-}
-function applyPower(type,x,y){
-  sparkle(x,y);
-  if (type==='shield'){ state.shield=1; if (els.bShield) els.bShield.classList.add('active'); SFX.pickupShield(); }
-  if (type==='speed'){ state.speedMoves=3; if (els.bSpeed) els.bSpeed.classList.add('active'); SFX.pickupSpeed(); }
-  if (type==='slow'){ state.slowUntil=performance.now()+5000; state.slowFactor=0.5; if (els.bSlow) els.bSlow.classList.add('active'); SFX.pickupSlow(); }
-  if (type==='clear'){ state.enemies.forEach(e=>e.el.remove()); state.enemies=[]; SFX.pickupClear(); }
-}
-function sparkle(x,y){
-  const cell = CELL();
-  for(let i=0;i<6;i++){
-    const s=document.createElement('div'); s.className='sparkle';
-    s.style.left=`${x*cell + cell*0.37 + Math.random()*cell*0.26}px`;
-    s.style.top =`${y*cell + cell*0.37 + Math.random()*cell*0.26}px`;
-    s.style.background = i%2? '#2ecc71':'#fff';
-    els.game.appendChild(s); setTimeout(()=>s.remove(),600);
-  }
-}
-
-/* ===================== Enemies ===================== */
-const BASE_SPEED = { pawn:1.15, bishop:2.20, rook:3.00, queen:1.35 }; // cells/sec
-function spawnEnemy(){
-  const r=Math.random();
-  const type = (r>0.85)?'queen' : (r>0.65)?'rook' : (r>0.40)?'bishop' : 'pawn';
-  const x=Math.floor(Math.random()*SIZE), y=-1;
-  const el=document.createElement('div'); el.className='piece enemy'; el.textContent=GLYPHS[type];
-  els.game.appendChild(el);
-  const px=x*CELL(), py=y*CELL();
-
-  if (type==='queen'){
-    const e={el,type,px,py,qx:x,qy:y,qtx:x,qty:0,qtpX:x*CELL(),qtpY:0,stepSpeed:BASE_SPEED.queen};
-    pickNextQueenTarget(e); e.qtpX=e.qtx*CELL(); e.qtpY=e.qty*CELL();
-    el.style.left=`${px}px`; el.style.top=`${py}px`; state.enemies.push(e); return;
-  }
-  if (type==='bishop'){
-    const dirX=(Math.random()<0.5)?-1:1;
-    const e={el,type,px,py,bx:x,by:y,bdir:dirX,btx:x+dirX,bty:0,btpX:(x+dirX)*CELL(),btpY:0,stepSpeed:BASE_SPEED.bishop};
-    if (e.btx<0||e.btx>=SIZE){ e.bdir=-e.bdir; e.btx=e.bx+e.bdir; e.btpX=e.btx*CELL(); }
-    el.style.left=`${px}px`; el.style.top=`${py}px`; state.enemies.push(e); return;
-  }
-  // pawns/rooks
-  const vxCells=0;
-  const vyCells=(type==='rook')? BASE_SPEED.rook : BASE_SPEED.pawn;
-  const e={el,type,px,py,vxCells,vyCells}; el.style.left=`${px}px`; el.style.top=`${py}px`; state.enemies.push(e);
-}
-function pickNextQueenTarget(e){
-  const cx=e.qx, cy=e.qy, ny=cy+1; const options=[];
-  for (let dx=-1; dx<=1; dx++){ const nx=cx+dx; if (nx>=0&&nx<SIZE) options.push(nx); }
-  const nx=options.length? options[(Math.random()*options.length)|0] : cx; e.qtx=nx; e.qty=ny;
-}
-function pickNextBishopTarget(e){
-  const cx=e.bx, cy=e.by; let nx=cx+e.bdir; const ny=cy+1;
-  if (nx<0||nx>=SIZE){ e.bdir=-e.bdir; nx=cx+e.bdir; }
-  e.btx=nx; e.bty=ny;
-}
-function stepEnemies(dt){
-  const dtSec=dt/1000, nowT=performance.now();
-  // expire powerups
-  for (let i=state.powerups.length-1;i>=0;i--){
-    if (nowT>state.powerups[i].expiresAt){ state.powerups[i].el.classList.add('fade'); setTimeout(()=>state.powerups[i].el.remove(),450); state.powerups.splice(i,1); }
-  }
-  if (state.slowUntil && nowT>state.slowUntil){ state.slowUntil=0; state.slowFactor=1.0; if (els.bSlow) els.bSlow.classList.remove('active'); }
-  if (els.speed) els.speed.textContent = (state.speedMult*(state.slowFactor||1)).toFixed(1)+'×';
-  const mult=state.speedMult*(state.slowFactor||1);
-  const cell=CELL(), maxX=(SIZE-1)*cell;
-
-  for (let i=state.enemies.length-1;i>=0;i--){
-    const e=state.enemies[i];
-    if (e.type==='queen'){
-      const speedPx=e.stepSpeed*cell*mult, dx=e.qtpX-e.px, dy=e.qtpY-e.py;
-      const dist=Math.hypot(dx,dy), step=speedPx*dtSec;
-      if (dist<=step || dist===0){
-        e.px=e.qtpX; e.py=e.qtpY; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
-        e.qx=e.qtx; e.qy=e.qty; if (e.qy>=SIZE){ e.el.remove(); state.enemies.splice(i,1); continue; }
-        pickNextQueenTarget(e); e.qtpX=e.qtx*cell; e.qtpY=e.qty*cell;
-      }else{ const ux=dx/dist, uy=dy/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px'; }
-    } else if (e.type==='bishop'){
-      const speedPx=e.stepSpeed*cell*mult, dx=e.btpX-e.px, dy=e.btpY-e.py;
-      const dist=Math.hypot(dx,dy), step=speedPx*dtSec;
-      if (dist<=step || dist===0){
-        e.px=e.btpX; e.py=e.btpY; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
-        e.bx=e.btx; e.by=e.bty; if (e.by>=SIZE){ e.el.remove(); state.enemies.splice(i,1); continue; }
-        pickNextBishopTarget(e); e.btpX=e.btx*cell; e.btpY=e.bty*cell;
-      }else{ const ux=dx/dist, uy=dy/dist; e.px+=ux*step; e.py+=uy*step; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px'; }
-    } else {
-      // pawns & rooks
-      const vx=(e.vxCells||0)*cell*mult, vy=(e.vyCells||0)*cell*mult;
-      let newPx = e.px + vx*dtSec; if (newPx<0) newPx=0; if (newPx>maxX) newPx=maxX;
-      e.px = newPx; e.py += vy*dtSec; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
-    }
-
-    // collision
-    const ex=Math.round(e.px/cell), ey=Math.round(e.py/cell);
-    if (ex===state.knight.x && ey===state.knight.y){
-      if (state.shield>0){ state.shield=0; if (els.bShield) els.bShield.classList.remove('active'); e.el.remove(); state.enemies.splice(i,1); els.game.classList.add('shake'); setTimeout(()=>els.game.classList.remove('shake'),220); SFX.shieldHit(); }
-      else { gameOver(); return; }
-    }
-    if (e.py>SIZE*cell){ e.el.remove(); state.enemies.splice(i,1); }
-  }
-
-  // danger glow if an enemy is one knight-move away
-  let danger=false;
-  for (const o of knightOffsets){
-    const tx=state.knight.x+o.x, ty=state.knight.y+o.y;
-    if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) continue;
-    if (state.enemies.some(e=>Math.round(e.px/cell)===tx && Math.round(e.py/cell)===ty)){ danger=true; break; }
-  }
-  knightEl.classList.toggle('danger', danger);
-}
-
-/* ===================== Knight movement ===================== */
-function moveKnightTo(tx,ty){
-  if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) return; // stay on board
-  state.knight.x=tx; state.knight.y=ty; placeKnight();
-  SFX.jump(); pickupAt(tx,ty); checkCollision(); updateDots(); clearGuide();
-  if (state.speedMoves>0){ state.speedMoves--; if (state.speedMoves===0 && els.bSpeed) els.bSpeed.classList.remove('active'); }
-}
-function checkCollision(){
-  const cell=CELL();
-  const hit = state.enemies.find(e => Math.round(e.px/cell)===state.knight.x && Math.round(e.py/cell)===state.knight.y);
-  if (hit){ if (state.shield>0){ state.shield=0; if (els.bShield) els.bShield.classList.remove('active'); hit.el.remove(); state.enemies=state.enemies.filter(e=>e!==hit); SFX.shieldHit(); } else gameOver(); }
-}
-
-// Two-step arrow keys
-const DIRS = { up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
-let arrowStep=0, firstArrow=null;
 function processArrow(dir){
   if (arrowStep===0){ firstArrow=dir; arrowStep=1; drawFirstArrow(dir); return; }
   const dx2=firstArrow.x*2, dy2=firstArrow.y*2;
@@ -574,7 +663,7 @@ function scheduleDifficulty(){
   state.timers.diff=setInterval(()=>{
     if (!state.running) return;
     state.speedMult += 0.4;
-    if (els.speed) els.speed.textContent = (state.speedMult*(state.slowFactor||1)).toFixed(1)+'×';
+    els.speed && (els.speed.textContent = (state.speedMult*(state.slowFactor||1)).toFixed(1)+'×');
     clearTimeout(state.timers.spawn);
     scheduleSpawn();
   }, 6000);
@@ -622,14 +711,16 @@ function restart(){
   state.powerups.forEach(p=>p.el.remove()); state.powerups=[];
   const over=document.getElementById('over'); if (over) over.remove();
   state.speedMult=1.0; state.slowFactor=1.0; state.slowUntil=0; state.shield=0; state.speedMoves=0;
-  if (els.bShield) els.bShield.classList.remove('active'); if (els.bSpeed) els.bSpeed.classList.remove('active'); if (els.bSlow) els.bSlow.classList.remove('active');
-  if (els.speed) els.speed.textContent='1.0×';
+  els.bShield && els.bShield.classList.remove('active'); els.bSpeed && els.bSpeed.classList.remove('active'); els.bSlow && els.bSlow.classList.remove('active');
+  els.speed && (els.speed.textContent='1.0×');
   state.startTime=performance.now(); state.lastTime=state.startTime;
   state.knight={x:3,y:6}; placeKnight();
   arrowStep=0; firstArrow=null; clearGuide();
   state.running=true; updateDots(); clearTimeout(state.timers.spawn); clearInterval(state.timers.diff);
   scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
-  SFX.restart(); Music.start();
+  SFX.restart();
+  // Start music if already unlocked
+  if (audio.ctx && audio.ctx.state === 'running') Music.start();
 }
 
 /* ===================== Relayout on resize (keep squares visible) ===================== */
@@ -667,7 +758,7 @@ function loop(now){
   if (!state.running) return;
   const dt=now-state.lastTime; state.lastTime=now;
   stepEnemies(dt);
-  if (els.score) els.score.textContent=((now-state.startTime)/1000).toFixed(1);
+  els.score && (els.score.textContent=((now-state.startTime)/1000).toFixed(1));
   requestAnimationFrame(loop);
 }
 (function start(){
@@ -679,5 +770,9 @@ function loop(now){
   scheduleSpawn();
   scheduleDifficulty();
   requestAnimationFrame(t=>{ state.lastTime=t; requestAnimationFrame(loop); });
-  Music.start();
+
+  // Only start music if context is running; otherwise first tap/keypress triggers it.
+  if (audio.ctx && audio.ctx.state === 'running') {
+    Music.start();
+  }
 })();
