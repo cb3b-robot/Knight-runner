@@ -1,5 +1,5 @@
 // =========================================================
-// Knight Runner — main.js (8×8 CSS grid + no page scroll + reliable SFX)
+// Knight Runner — main.js (8×8 CSS grid + no scroll + reliable SFX)
 // =========================================================
 /* global ResizeObserver */
 'use strict';
@@ -236,7 +236,7 @@ function placeKnight(){ knightEl.style.left=(knight.x*CELL())+'px'; knightEl.sty
 placeKnight();
 
 // --------------------------------------------------------
-//                     SVG ARROW GUIDE
+//                     SVG ARROW GUIDE (real function)
 // --------------------------------------------------------
 const svgNS='http://www.w3.org/2000/svg';
 const guide = document.createElementNS(svgNS,'svg');
@@ -244,30 +244,62 @@ guide.setAttribute('id','guideLayer');
 guide.setAttribute('viewBox', '0 0 ' + (CELL()*SIZE) + ' ' + (CELL()*SIZE));
 game.appendChild(guide);
 const defs = document.createElementNS(svgNS,'defs');
-function mk(id,color){ const m=document.createElementNS(svgNS,'marker'); m.setAttribute('id',id); m.setAttribute('markerWidth','10'); m.setAttribute('markerHeight','10'); m.setAttribute('refX','6'); m.setAttribute('refY','3'); m.setAttribute('orient','auto-start-reverse'); const p=document.createElementNS(svgNS,'path'); p.setAttribute('d','M0,0 L6,3 L0,6 Z'); p.setAttribute('fill',color); m.appendChild(p); return m; }
-defs.appendChild(mk('headPrimary','#2ecc71')); defs.appendChild(mk('headHint','#00d2ff')); defs.appendChild(mk('headInvalid','#e74c3c')); guide.appendChild(defs);
-function clearGuide(){ while (guide.lastChild && guide.lastChild!==defs) guide.removeChild(guide.lastChild); }
+function mkMarker(id,color){
+  const m=document.createElementNS(svgNS,'marker');
+  m.setAttribute('id',id); m.setAttribute('markerWidth','10'); m.setAttribute('markerHeight','10');
+  m.setAttribute('refX','6'); m.setAttribute('refY','3'); m.setAttribute('orient','auto-start-reverse');
+  const p=document.createElementNS(svgNS,'path'); p.setAttribute('d','M0,0 L6,3 L0,6 Z'); p.setAttribute('fill',color);
+  m.appendChild(p); return m;
+}
+defs.appendChild(mkMarker('headPrimary','#2ecc71'));
+defs.appendChild(mkMarker('headHint','#00d2ff'));
+defs.appendChild(mkMarker('headInvalid','#e74c3c'));
+guide.appendChild(defs);
+
+function clearGuide(){
+  while (guide.lastChild && guide.lastChild!==defs) guide.removeChild(guide.lastChild);
+}
+
 function drawFirstArrow(dir){
   clearGuide();
-  const cell=CELL(), cx=knight.x*cell+cell/2, cy=knight.y*cell+cell/2;
+  const cell=CELL();
+  const cx=knight.x*cell+cell/2, cy=knight.y*cell+cell/2;
   const tx=knight.x+dir.x*2, ty=knight.y+dir.y*2;
   const ok = inside(tx,ty);
   const ex=clamp(tx*cell+cell/2,0,(SIZE-1)*cell), ey=clamp(ty*cell+cell/2,0,(SIZE-1)*cell);
+
+  // primary arrow (first step of L)
   const prim=document.createElementNS(svgNS,'line');
-  prim.setAttribute('x1',cx); prim.setAttribute('y1',cy); prim.setAttribute('x2',ex); prim.setAttribute('y2',ey);
+  prim.setAttribute('x1',cx); prim.setAttribute('y1',cy);
+  prim.setAttribute('x2',ex); prim.setAttribute('y2',ey);
   prim.setAttribute('class','ga-primary'+(ok?'':' ga-invalid'));
-  prim.setAttribute('marker-end', ok?'url(#headPrimary)':'url(#headInvalid)'); guide.appendChild(prim);
+  prim.setAttribute('marker-end', ok?'url(#headPrimary)':'url(#headInvalid)');
+  guide.appendChild(prim);
+
+  // label
   const label=document.createElementNS(svgNS,'text');
   label.setAttribute('x', ex + (dir.x===1?10: dir.x===-1?-10:0));
   label.setAttribute('y', ey + (dir.y===1?18: dir.y===-1?-10:-12));
-  label.setAttribute('text-anchor', dir.x===-1 ? 'end':'start'); label.setAttribute('class','ga-label');
-  label.textContent = ok ? 'then choose ⟂' : 'out of bounds'; guide.appendChild(label);
+  label.setAttribute('text-anchor', dir.x===-1 ? 'end':'start');
+  label.setAttribute('class','ga-label');
+  label.textContent = ok ? 'then choose ⟂' : 'out of bounds';
+  guide.appendChild(label);
+
   if(!ok) return;
-  const hints=[]; if(dir.x!==0){ hints.push({hx:tx,hy:ty+1}); hints.push({hx:tx,hy:ty-1}); } else { hints.push({hx:tx+1,hy:ty}); hints.push({hx:tx-1,hy:ty}); }
-  for (let i=0;i<hints.length;i++){ const h=hints[i]; if(!inside(h.hx,h.hy)) continue;
+
+  // perpendicular hints
+  const hints=[];
+  if(dir.x!==0){ hints.push({hx:tx,hy:ty+1}); hints.push({hx:tx,hy:ty-1}); }
+  else         { hints.push({hx:tx+1,hy:ty}); hints.push({hx:tx-1,hy:ty}); }
+  for (let i=0;i<hints.length;i++){
+    const h=hints[i]; if(!inside(h.hx,h.hy)) continue;
     const hx=h.hx*cell+cell/2, hy=h.hy*cell+cell/2;
-    const line=document.createElementNS(svgNS,'line'); line.setAttribute('x1',ex); line.setAttribute('y1',ey); line.setAttribute('x2',hx); line.setAttribute('y2',hy);
-    line.setAttribute('class','ga-hint'); line.setAttribute('marker-end','url(#headHint)'); guide.appendChild(line);
+    const line=document.createElementNS(svgNS,'line');
+    line.setAttribute('x1',ex); line.setAttribute('y1',ey);
+    line.setAttribute('x2',hx); line.setAttribute('y2',hy);
+    line.setAttribute('class','ga-hint');
+    line.setAttribute('marker-end','url(#headHint)');
+    guide.appendChild(line);
   }
 }
 
@@ -496,7 +528,6 @@ function moveKnightTo(tx,ty){
 }
 const DIRS = { up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
 let arrowStep=0, firstArrow=null;
-function drawFirstArrow(dir){ /* defined earlier */ } // keep as defined above
 document.addEventListener('keydown', (e)=>{
   if (!running) return;
   const k=e.key.replace('Arrow','').toLowerCase();
@@ -511,7 +542,7 @@ document.addEventListener('keydown', (e)=>{
   else { arrowStep=0; firstArrow=null; clearGuide(); return; }
   if (!inside(tx,ty)){ arrowStep=0; firstArrow=null; clearGuide(); return; }
   arrowStep=0; firstArrow=null; clearGuide(); moveKnightTo(tx,ty);
-});
+}, {passive:false});
 
 // --------------------------------------------------------
 //                    GAME LOOP / START
@@ -525,7 +556,7 @@ function loop(t){
   scoreEl.textContent=((t-startTime)/1000).toFixed(1);
   requestAnimationFrame(loop);
 }
-function scheduleSpawn(){ const base=1500; const next=Math.max(80, base/(speedMult*(slowFactor||1)));
+function scheduleSpawn(){ const next=Math.max(80, 1500/(speedMult*(slowFactor||1)));
   spawnTimer=setTimeout(function tick(){ if(!running) return; (Math.random()<0.12)?spawnPowerUp():spawnEnemy(); scheduleSpawn(); }, next);
 }
 function scheduleDifficulty(){ difficultyTimer=setInterval(()=>{ if(!running) return; speedMult+=0.4; speedEl.textContent=(speedMult*(slowFactor||1)).toFixed(1)+'×'; clearTimeout(spawnTimer); scheduleSpawn(); }, 6000); }
