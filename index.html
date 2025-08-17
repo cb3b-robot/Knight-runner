@@ -2,45 +2,44 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!-- Disable zoom: maximum-scale=1 + user-scalable=no -->
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Knight Runner</title>
 
-  <!-- Main CSS (path/case must match exactly) -->
-  <link rel="stylesheet" href="style.css?v=fit-lock-1">
+  <!-- Main CSS (keep exact path/case) -->
+  <link rel="stylesheet" href="style.css?v=no-zoom-1">
 
-  <!-- Minimal fallback so a board is visible even if CSS/JS fail -->
+  <!-- Tiny fallback grid, just in case CSS fails to load -->
   <style id="board-fallback">
-    :root{ --board:min(92vmin,92vh); --cell:calc(var(--board)/8); }
-    body{ margin:0; background:#111; color:#fff; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-          display:flex; flex-direction:column; align-items:center; gap:10px;
-          padding: env(safe-area-inset-top) 10px env(safe-area-inset-bottom); }
-    h1{ margin:6px 0 0; font-size: clamp(18px, 3.8vw, 28px); }
-    .hud{ display:flex; gap:10px; align-items:center; justify-content:center; flex-wrap:wrap; }
-    .pill{ padding:6px 10px; border-radius:999px; background:#222; border:1px solid #333; }
-
-    /* CSS-only checkerboard so users see a board even before JS */
+    :root{ --board:min(92vmin,92svmin); --cell:calc(var(--board)/8); }
     #game{
       position:relative; width:var(--board); height:var(--board);
-      border:4px solid #fff; border-radius:12px; overflow:hidden;
-      background:
-        linear-gradient(90deg, #f0d9b5 12.5%, #b58863 12.5%, #b58863 37.5%, #f0d9b5 37.5%, #f0d9b5 62.5%, #b58863 62.5%, #b58863 87.5%, #f0d9b5 87.5%) 0 0/ calc(var(--cell)*2) calc(var(--cell)*2),
-        linear-gradient(#f0d9b5 12.5%, #b58863 12.5%, #b58863 37.5%, #f0d9b5 37.5%, #f0d9b5 62.5%, #b58863 62.5%, #b58863 87.5%, #f0d9b5 87.5%) 0 0/ calc(var(--cell)*2) calc(var(--cell)*2);
+      border:4px solid #fff; border-radius:12px; overflow:hidden; background:#222;
     }
+    .square{ position:absolute; width:var(--cell); height:var(--cell); }
+    .light{ background:#f0d9b5; } .dark{ background:#b58863; }
   </style>
 
-  <!-- Error overlay so blank pages show what's wrong -->
+  <!-- Error overlay (so blank pages show what's wrong) -->
   <style>
-    #errorOverlay{ position:fixed; inset:0; display:none; background:#1b1b1bcc; color:#fff; z-index:99999;
-      align-items:flex-start; justify-content:center; padding:16px; overflow:auto }
-    #errorOverlay pre{ max-width:900px; width:100%; background:#2a2a2a; border:1px solid #ff6b6b; border-radius:10px;
-      padding:12px; white-space:pre-wrap; word-break:break-word }
+    #errorOverlay {
+      position: fixed; inset: 0; display: none;
+      background: #1b1b1bcc; color: #fff; z-index: 99999;
+      align-items: flex-start; justify-content: center; padding: 16px; overflow: auto;
+    }
+    #errorOverlay pre {
+      max-width: 900px; width: 100%;
+      background: #2a2a2a; border: 1px solid #ff6b6b; border-radius: 10px;
+      padding: 12px; white-space: pre-wrap; word-break: break-word;
+    }
   </style>
 </head>
 <body>
   <h1>Knight Runner</h1>
 
   <!-- HUD -->
-  <div class="hud" id="hud">
+  <div class="hud">
     <div class="pill">Score: <span id="score">0.0</span>s</div>
     <div class="pill">Speed: <span id="speed">1.0×</span></div>
     <div id="status">
@@ -51,7 +50,7 @@
     </div>
   </div>
 
-  <!-- Game canvas -->
+  <!-- Game board -->
   <div id="game"></div>
 
   <!-- Leaderboard -->
@@ -67,10 +66,10 @@
     <ol id="lbList"></ol>
   </div>
 
-  <!-- Error overlay (will display JS errors or loader diagnostics) -->
+  <!-- Error overlay -->
   <div id="errorOverlay"><pre id="errorText"></pre></div>
 
-  <!-- Show JS errors on-page so issues aren’t silent -->
+  <!-- Show JS errors on-page -->
   <script>
     (function(){
       const overlay = document.getElementById('errorOverlay');
@@ -79,118 +78,52 @@
         overlay.style.display='flex';
         text.textContent='JavaScript error:\\n\\n' + msg;
       }
-      window.addEventListener('error', e=>{
+      addEventListener('error', e=>{
         show((e.message||'Unknown error') + (e.filename? '\\n'+e.filename:'') + (e.lineno? ':'+e.lineno:''));
       });
-      window.addEventListener('unhandledrejection', e=>{
+      addEventListener('unhandledrejection', e=>{
         show('Unhandled promise: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)));
       });
     })();
   </script>
 
-  <!-- Fit script: size board to visible viewport; lock scroll when it fits -->
+  <!-- 🔒 Disable pinch & double-tap zoom (iOS/Safari friendly) -->
   <script>
     (function(){
-      const root  = document.documentElement;
-      const body  = document.body;
-      const game  = document.getElementById('game');
-      const title = document.querySelector('h1');
-      const hud   = document.getElementById('hud');
-      const lb    = document.getElementById('leaderboard');
-
-      const vvh = () => (window.visualViewport && window.visualViewport.height) || window.innerHeight || 600;
-      const vvw = () => (window.visualViewport && window.visualViewport.width)  || window.innerWidth  || 600;
-
-      function h(el){ return el ? Math.ceil(el.getBoundingClientRect().height) : 0; }
-      function safePadBottom(){ return parseFloat(getComputedStyle(body).paddingBottom) || 0; }
-
-      function fitBoard(){
-        const pad = 12; // breathing room between HUD and board
-        const usableH = Math.floor(vvh() - h(title) - h(hud) - pad - safePadBottom());
-        const usableW = Math.floor(vvw() - 16); // ~8px margins
-        const size    = Math.max(240, Math.min(usableH, usableW));
-
-        // Apply size
-        root.style.setProperty('--board', size + 'px');
-        root.style.setProperty('--cell',  (size/8) + 'px');
-        game.style.width  = size + 'px';
-        game.style.height = size + 'px';
-
-        // Decide if everything fits without page scroll
-        const totalNeeded = h(title) + h(hud) + size + h(lb) + safePadBottom() + 1; // +1px fudge
-        const fits = totalNeeded <= vvh();
-
-        if (fits) {
-          body.style.overflowY = 'hidden';
-          body.style.height = vvh() + 'px';   // lock to current visible viewport
-        } else {
-          body.style.overflowY = 'auto';
-          body.style.height = '';             // allow natural scroll
+      // Prevent two quick taps from zooming
+      var lastTouchEnd = 0;
+      document.addEventListener('touchend', function(e){
+        var now = Date.now();
+        if (now - lastTouchEnd <= 300) {
+          e.preventDefault();
         }
-      }
+        lastTouchEnd = now;
+      }, {passive:false});
 
-      if (window.visualViewport){
-        visualViewport.addEventListener('resize', fitBoard);
-        visualViewport.addEventListener('scroll', fitBoard);
-      }
-      window.addEventListener('resize', fitBoard, {passive:true});
-      window.addEventListener('orientationchange', () => setTimeout(fitBoard, 120), {passive:true});
-      document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(fitBoard, 60); });
-      if (document.fonts && document.fonts.ready) { document.fonts.ready.then(fitBoard).catch(()=>{}); }
+      // Block Safari's pinch-zoom gesture events
+      ['gesturestart','gesturechange','gestureend'].forEach(function(ev){
+        document.addEventListener(ev, function(e){ e.preventDefault(); }, {passive:false});
+      });
 
-      // Initial + delayed passes to catch URL bar animations
-      fitBoard(); setTimeout(fitBoard, 150); setTimeout(fitBoard, 600);
-
-      // Hook so other scripts can re-fit (e.g., after "Show more")
-      window.krFitBoard = fitBoard;
+      // Optional: block Ctrl+wheel zoom on desktop
+      document.addEventListener('wheel', function(e){
+        if (e.ctrlKey) e.preventDefault();
+      }, {passive:false});
     })();
   </script>
 
-  <!-- Modern browsers: ES module entry -->
-  <script type="module" src="./js/main.js?v=fit-lock-1"></script>
+  <!-- ES module entry -->
+  <script type="module" src="./js/main.js?v=no-zoom-1"></script>
 
-  <!-- Old browsers: friendly message instead of failing silently -->
-  <script nomodule>
-    (function () {
-      var msg =
-        "Your browser is too old to run Knight Runner.\\n\\n" +
-        "Please update to a recent version of Chrome, Edge, Firefox, or Safari (iOS 12+).";
-      var d = document.createElement('div');
-      d.style.cssText="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#111;color:#fff;z-index:10000;padding:24px;text-align:center;white-space:pre-wrap";
-      d.textContent = msg;
-      document.body.appendChild(d);
-    })();
-  </script>
-
-  <!-- If the real stylesheet loaded, remove the fallback CSS -->
+  <!-- Remove fallback styles if real CSS loaded -->
   <script>
-    window.addEventListener('load', () => {
-      const flag = getComputedStyle(document.documentElement)
-        .getPropertyValue('--css-loaded')
-        .replace(/["']/g,'').trim();
-      if (flag === 'yes') {
+    (function(){
+      const computed = getComputedStyle(document.documentElement).getPropertyValue('--board');
+      if (computed && computed.trim() !== '') {
         const fb = document.getElementById('board-fallback');
         if (fb) fb.remove();
       }
-    });
-  </script>
-
-  <!-- If the module didn’t execute, show a helpful message -->
-  <script>
-    setTimeout(() => {
-      if (window.__KR_BOOT__ !== 'loaded') {
-        const overlay = document.getElementById('errorOverlay');
-        const text = document.getElementById('errorText');
-        overlay.style.display = 'flex';
-        text.textContent =
-          "Your module entry js/main.js did not execute.\\n\\n" +
-          "Likely causes:\\n" +
-          "• Path or filename case mismatch (GitHub Pages is case-sensitive)\\n" +
-          "• File missing (404) or a syntax/runtime error early in the file\\n\\n" +
-          "Quick test: open /js/main.js directly in your browser.\\n" +
-          "If you see a 404, fix the path/case.\\n";
-      }
-    }, 1200);
+    })();
   </script>
 </body>
 </html>
