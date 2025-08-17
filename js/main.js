@@ -1,5 +1,5 @@
 // =========================================================
-// Knight Runner — main.js (8x8 fit + scroll lock + reliable SFX)
+// Knight Runner — main.js (8x8 fit + no-scroll-lock + reliable SFX)
 // =========================================================
 /* global ResizeObserver */
 'use strict';
@@ -30,36 +30,36 @@ function inside(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
 function clamp(v,a,b){ return v<a?a : (v>b?b:v); }
 
 // --------------------------------------------------------
-//            BOARD FIT + SCROLL LOCK CONTROLLER
+//            BOARD FIT (no scroll lock, zoom blocked in HTML)
 // --------------------------------------------------------
 function krFitBoard(){
   var vw = window.innerWidth  || document.documentElement.clientWidth  || 800;
   var vh = window.innerHeight || document.documentElement.clientHeight || 600;
 
-  var hudH = hud ? Math.ceil(hud.getBoundingClientRect().height) : 0;
-  var lbH  = leaderboardEl ? Math.ceil(leaderboardEl.getBoundingClientRect().height) : 0;
+  // Measure live heights so expanded leaderboard is accounted for
+  var hudEl = document.querySelector('.hud');
+  var lbEl  = document.getElementById('leaderboard');
+  var hudH = hudEl ? Math.ceil(hudEl.getBoundingClientRect().height) : 0;
+  var lbH  = lbEl  ? Math.ceil(lbEl.getBoundingClientRect().height)  : 0;
+
   var verticalPad = 16;
 
   var maxByHeight = Math.max(200, vh - hudH - verticalPad - 8);
   var maxByWidth  = Math.max(200, vw - 16);
   var size = Math.floor(Math.min(maxByHeight, maxByWidth));
 
-  root.style.setProperty('--board', size + 'px');
-  root.style.setProperty('--cell',  (size/8) + 'px');
+  // Keep board strictly 8×8
+  document.documentElement.style.setProperty('--board', size + 'px');
+  document.documentElement.style.setProperty('--cell',  (size/8) + 'px');
 
-  // Lock scroll if everything fits in view
-  var totalNeeded = hudH + size + lbH + verticalPad + 8;
-  var lock = totalNeeded <= vh;
-
-  document.body.style.overflowY = lock ? 'hidden' : '';
-  document.body.style.height    = lock ? '100dvh' : '';
+  // ✅ Do NOT lock scroll here; zoom is disabled via meta + handlers in index.html
 }
 window.krFitBoard = krFitBoard;
 
 window.addEventListener('resize', krFitBoard, {passive:true});
 window.addEventListener('orientationchange', function(){ setTimeout(krFitBoard, 150); }, {passive:true});
 
-// Early fit so CELL() is right before building board
+// Early fit so CELL() is correct before building board
 krFitBoard();
 
 // --------------------------------------------------------
@@ -165,7 +165,6 @@ if (muteBtn){
     applyMuteUI();
   });
 }
-// Resume when returning to tab (Safari can suspend)
 document.addEventListener('visibilitychange', function(){
   if (document.visibilityState === 'visible' && audio.ctx) {
     try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch(e){}
@@ -483,7 +482,7 @@ function checkCollision(){
     if (Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y){
       if (shield>0){
         shield=0; bShield.classList.remove('active');
-        enemies = enemies.filter(function(en){ return !(Math.round(en.px/CELL())===knight.x && Math.round(en.py/CELL())===knight.y); });
+        enemies = enemies.filter(function(en){ return !(Math.round(en.px/CELL())===knight.x && Math.round(en.px/CELL())===knight.x && Math.round(en.py/CELL())===knight.y); });
         SFX.shieldHit();
       } else { gameOver(); }
       return;
@@ -597,7 +596,6 @@ if (typeof ResizeObserver !== 'undefined'){
   });
   ro.observe(game);
 } else {
-  // Fallback: recompute on window resize
   window.addEventListener('resize', function(){
     const squares=document.querySelectorAll('.square');
     for (let i=0;i<squares.length;i++){ const sq=squares[i]; const x=i%SIZE, y=(i/SIZE)|0; sq.style.left=(x*CELL())+'px'; sq.style.top=(y*CELL())+'px'; }
