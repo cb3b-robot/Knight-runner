@@ -1,10 +1,7 @@
-// =========================================================
-// Knight Runner — main.js (8×8 CSS grid + no scroll + reliable SFX)
-// =========================================================
-/* global ResizeObserver */
+/* Knight Runner — main.js (iPad visualViewport fit, 8×8, no scroll, reliable SFX) */
 'use strict';
 
-// ---------- DOM refs ----------
+/* ---------- DOM ---------- */
 const root     = document.documentElement;
 const game     = document.getElementById('game');
 const scoreEl  = document.getElementById('score');
@@ -17,47 +14,51 @@ const bShield  = document.getElementById('bShield');
 const bSpeed   = document.getElementById('bSpeed');
 const bSlow    = document.getElementById('bSlow');
 
-// ---------- Constants ----------
+/* ---------- Constants ---------- */
 const SIZE = 8;
-// Use the filled black glyphs, then recolor via CSS.
-// Knight uses ♞ so it appears fully filled in white.
-const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
+const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; // filled look via color
+const knightOffsets = [
+  {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
+  {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
+];
+
 function inside(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
 function clamp(v,a,b){ return v<a?a : (v>b?b:v); }
-// Always compute cell from *actual* board width (works with CSS grid)
 function CELL(){ return game.clientWidth / SIZE; }
 
-// --------------------------------------------------------
-//            Fit board & FORCE no page scroll
-// --------------------------------------------------------
+/* ---------- Fit board (iPad-friendly) ---------- */
+function vvWidth(){ return (window.visualViewport ? window.visualViewport.width : (innerWidth || document.documentElement.clientWidth || 800)); }
+function vvHeight(){ return (window.visualViewport ? window.visualViewport.height : (innerHeight || document.documentElement.clientHeight || 600)); }
+
 function krFitBoard(){
-  const vw = window.innerWidth  || document.documentElement.clientWidth  || 800;
-  const vh = window.innerHeight || document.documentElement.clientHeight || 600;
+  const vw = Math.floor(vvWidth());
+  const vh = Math.floor(vvHeight());
 
   const hudEl = document.querySelector('.hud');
-  const hudH = hudEl ? Math.ceil(hudEl.getBoundingClientRect().height) : 0;
+  const hudH  = hudEl ? Math.ceil(hudEl.getBoundingClientRect().height) : 0;
 
-  const verticalPad = 16;
-  const maxByHeight = Math.max(200, vh - hudH - verticalPad - 8);
-  const maxByWidth  = Math.max(200, vw - 16);
-  const size = Math.floor(Math.min(maxByHeight, maxByWidth));
+  const availH = Math.max(240, vh - hudH - 8);
+  const availW = Math.max(240, vw - 16);
 
+  const size = Math.floor(Math.min(availH, availW));
   root.style.setProperty('--board', size + 'px');
-  root.style.setProperty('--cell',  (size/8) + 'px');
+  root.style.setProperty('--cell',  (size / 8) + 'px');
 
-  // 🚫 Always no page scroll
+  // Disable page scrolling entirely (keeps layout stable)
   document.documentElement.style.overflow = 'hidden';
-  document.body.style.overflow = 'hidden';
-  document.documentElement.style.height = '100dvh';
-  document.body.style.height = '100dvh';
+  document.body.style.overflow           = 'hidden';
+  document.documentElement.style.height  = '100dvh';
+  document.body.style.height             = '100dvh';
 }
-window.addEventListener('resize', krFitBoard, {passive:true});
-window.addEventListener('orientationchange', () => setTimeout(krFitBoard, 150), {passive:true});
-krFitBoard(); // early sizing
+krFitBoard();
+addEventListener('resize', krFitBoard, {passive:true});
+addEventListener('orientationchange', () => setTimeout(krFitBoard, 120), {passive:true});
+if (window.visualViewport){
+  window.visualViewport.addEventListener('resize', krFitBoard, {passive:true});
+  window.visualViewport.addEventListener('scroll', krFitBoard, {passive:true});
+}
 
-// --------------------------------------------------------
-//                          AUDIO
-// --------------------------------------------------------
+/* ---------- Audio (reliable sfx/music) ---------- */
 const MUTE_KEY = 'KR_mute';
 let audio = { ctx:null, enabled:true, unlocked:false };
 try { audio.enabled = (localStorage.getItem(MUTE_KEY) !== 'true'); } catch{}
@@ -68,13 +69,13 @@ function unlockAudio(){
   if (audio.unlocked) return;
   ensureAudio();
   try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch{}
-  try { const s = audio.ctx.createBufferSource(); s.buffer = audio.ctx.createBuffer(1,1,22050); s.connect(audio.ctx.destination); s.start(0);} catch{}
-  audio.unlocked = true;
-  Music.start();
+  // silent click to satisfy autoplay
+  try { const s=audio.ctx.createBufferSource(); s.buffer=audio.ctx.createBuffer(1,1,22050); s.connect(audio.ctx.destination); s.start(0);} catch{}
+  audio.unlocked = true; Music.start();
 }
-['pointerdown','touchstart','mousedown','keydown','click'].forEach(evt=>{
-  document.addEventListener(evt, unlockAudio, {once:true, passive:true});
-});
+['pointerdown','touchstart','mousedown','keydown','click'].forEach(evt =>
+  document.addEventListener(evt, unlockAudio, {once:true, passive:true})
+);
 
 function tone(o){
   o=o||{};
@@ -83,11 +84,10 @@ function tone(o){
   const freq=o.freq||440, type=o.type||'sine', dur=o.dur||0.12, gain=o.gain||0.05, attack=o.attack||0.01, release=o.release||0.12;
   const slideTo=(o.slideTo==null?null:o.slideTo), slideTime=o.slideTime||0.08;
   if (!audio.enabled) return;
-  const t0 = now();
-  const osc = audio.ctx.createOscillator();
-  const g   = audio.ctx.createGain();
-  const f   = audio.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=9000;
-  osc.type = type; osc.frequency.value = freq;
+  const t0=now();
+  const osc=audio.ctx.createOscillator(), g=audio.ctx.createGain(), f=audio.ctx.createBiquadFilter();
+  f.type='lowpass'; f.frequency.value=9000;
+  osc.type=type; osc.frequency.value=freq;
   g.gain.setValueAtTime(0, t0);
   g.gain.linearRampToValueAtTime(gain, t0+attack);
   if (slideTo!=null) osc.frequency.linearRampToValueAtTime(slideTo, t0+slideTime);
@@ -120,17 +120,18 @@ const Music = (function(){
     delay.connect(master); lowpass.connect(master); master.connect(audio.ctx.destination);
   }
   function mtof(n){ return 440*Math.pow(2,(n-69)/12); }
-  function note(o){ if(!audio.enabled) return; const when=o.when, freq=o.freq, dur=(o.dur||0.22), type=(o.type||'triangle'), gain=(o.gain||0.18);
+  function note(o){ if(!audio.enabled) return; const when=o.when, freq=o.freq, dur=o.dur||0.22, type=o.type||'triangle', gain=o.gain||0.18;
     const osc=audio.ctx.createOscillator(), g=audio.ctx.createGain();
     osc.type=type; osc.frequency.value=freq;
     g.gain.setValueAtTime(0.0001,when); g.gain.linearRampToValueAtTime(gain,when+0.01); g.gain.exponentialRampToValueAtTime(0.0001,when+dur);
     osc.connect(g); g.connect(arpGain); osc.start(when); osc.stop(when+dur+0.02);
   }
-  function pad(o){ if(!audio.enabled) return; const when=o.when, freq=o.freq, dur=(o.dur||3.6), gain=(o.gain||0.10);
+  function pad(o){ if(!audio.enabled) return; const when=o.when, freq=o.freq, dur=o.dur||3.6, gain=o.gain||0.10;
     const o1=audio.ctx.createOscillator(), o2=audio.ctx.createOscillator(), g=audio.ctx.createGain();
     o1.type='sine'; o2.type='sine'; o1.frequency.value=freq; o2.frequency.value=freq*Math.pow(2,7/1200);
     g.gain.setValueAtTime(0.0001,when); g.gain.linearRampToValueAtTime(gain,when+0.6); g.gain.linearRampToValueAtTime(0.0001,when+dur);
-    o1.connect(g); o2.connect(g); g.connect(padGain); o1.start(when); o2.start(when); o1.stop(when+dur+0.1); o2.stop(when+dur+0.1);
+    o1.connect(g); o2.connect(g); g.connect(padGain);
+    o1.start(when); o2.start(when); o1.stop(when+dur+0.1); o2.stop(when+dur+0.1);
   }
   const roots=[57,53,60,55], pattern=[0,7,12,7,0,7,12,14], stepDur=0.5;
   function tick(){ if(!playing||!audio.enabled) return; const t=now(); const bar=Math.floor(step/4); const rootN=roots[bar%roots.length];
@@ -158,26 +159,24 @@ document.addEventListener('visibilitychange', ()=>{
   }
 });
 
-// --------------------------------------------------------
-//                      LEADERBOARD (local)
-// --------------------------------------------------------
+/* ---------- Leaderboard (local) ---------- */
 const LS_KEY = 'knightRunnerTopScores_v1';
 function loadScores(){ try{ const raw=localStorage.getItem(LS_KEY); const a=raw?JSON.parse(raw):[]; return Array.isArray(a)?a:[]; }catch{ return []; } }
 function saveScores(arr){ try{ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }catch{} }
 function addScore(name, score){
-  const list = loadScores(); list.push({ name:(name||'Player').trim(), score:+score, ts:Date.now() });
-  list.sort((a,b)=> (b.score - a.score) || (a.ts - b.ts));
-  const top = list.slice(0, 50); saveScores(top); return top;
+  const list=loadScores(); list.push({name:(name||'Player').trim(), score:+score, ts:Date.now()});
+  list.sort((a,b)=> (b.score-a.score) || (a.ts-b.ts));
+  const top=list.slice(0,50); saveScores(top); return top;
 }
 function renderLeaderboard(myName,myScore){
   lbList.innerHTML='';
-  const list = loadScores();
+  const list=loadScores();
   if(list.length===0){
     const li=document.createElement('li'); const a=document.createElement('div'); a.className='name'; a.textContent='No scores yet';
     const b=document.createElement('div'); b.className='score'; b.textContent='—';
     lbList.appendChild(li); lbList.appendChild(a); lbList.appendChild(b); return;
   }
-  for (let i=0;i<list.length;i++){
+  for(let i=0;i<list.length;i++){
     const e=list[i];
     const li=document.createElement('li');
     const name=document.createElement('div'); name.className='name'; name.textContent=(i+1)+'. '+e.name;
@@ -185,7 +184,7 @@ function renderLeaderboard(myName,myScore){
     if(myName && myScore!=null && e.name===myName && Math.abs(e.score-myScore)<1e-6){ name.style.color='#2ecc71'; sc.style.color='#2ecc71'; }
     lbList.appendChild(li); lbList.appendChild(name); lbList.appendChild(sc);
   }
-  krFitBoard(); // keep layout tight if list height changed
+  krFitBoard();
 }
 renderLeaderboard();
 if (resetBtn){
@@ -205,40 +204,34 @@ if (toggleLB){
   });
 }
 
-// --------------------------------------------------------
-//                        BUILD BOARD (CSS grid)
-// --------------------------------------------------------
-const boardFrag = document.createDocumentFragment();
-for (let y=0;y<SIZE;y++){
-  for (let x=0;x<SIZE;x++){
+/* ---------- Build board (grid tiles) ---------- */
+const boardFrag=document.createDocumentFragment();
+for(let y=0;y<SIZE;y++){
+  for(let x=0;x<SIZE;x++){
     const sq=document.createElement('div');
     sq.className='square ' + ((x+y)%2?'dark':'light');
-    boardFrag.appendChild(sq); // no absolute positioning here
+    boardFrag.appendChild(sq);
   }
 }
 game.appendChild(boardFrag);
 
-// --------------------------------------------------------
-//                          KNIGHT
-// --------------------------------------------------------
-let knight = { x:3, y:6 };
-const knightEl = document.createElement('div');
-knightEl.className = 'piece knight';
+/* ---------- Knight ---------- */
+let knight={x:3, y:6};
+const knightEl=document.createElement('div');
+knightEl.className='piece knight';
 knightEl.setAttribute('data-glyph', GLYPHS.knight);
-knightEl.textContent = ''; // rendered by ::before in CSS
+knightEl.textContent='';
 game.appendChild(knightEl);
 function placeKnight(){ knightEl.style.left=(knight.x*CELL())+'px'; knightEl.style.top=(knight.y*CELL())+'px'; }
 placeKnight();
 
-// --------------------------------------------------------
-//                     SVG ARROW GUIDE
-// --------------------------------------------------------
+/* ---------- SVG arrow guide ---------- */
 const svgNS='http://www.w3.org/2000/svg';
-const guide = document.createElementNS(svgNS,'svg');
+const guide=document.createElementNS(svgNS,'svg');
 guide.setAttribute('id','guideLayer');
-guide.setAttribute('viewBox', '0 0 ' + (CELL()*SIZE) + ' ' + (CELL()*SIZE));
+guide.setAttribute('viewBox','0 0 '+(CELL()*SIZE)+' '+(CELL()*SIZE));
 game.appendChild(guide);
-const defs = document.createElementNS(svgNS,'defs');
+const defs=document.createElementNS(svgNS,'defs');
 function mkMarker(id,color){
   const m=document.createElementNS(svgNS,'marker');
   m.setAttribute('id',id); m.setAttribute('markerWidth','10'); m.setAttribute('markerHeight','10');
@@ -251,22 +244,22 @@ defs.appendChild(mkMarker('headHint','#00d2ff'));
 defs.appendChild(mkMarker('headInvalid','#e74c3c'));
 guide.appendChild(defs);
 
-function clearGuide(){
-  while (guide.lastChild && guide.lastChild!==defs) guide.removeChild(guide.lastChild);
-}
+function clearGuide(){ while(guide.lastChild && guide.lastChild!==defs) guide.removeChild(guide.lastChild); }
 function drawFirstArrow(dir){
   clearGuide();
   const cell=CELL();
   const cx=knight.x*cell+cell/2, cy=knight.y*cell+cell/2;
   const tx=knight.x+dir.x*2, ty=knight.y+dir.y*2;
-  const ok = inside(tx,ty);
+  const ok=inside(tx,ty);
   const ex=clamp(tx*cell+cell/2,0,(SIZE-1)*cell), ey=clamp(ty*cell+cell/2,0,(SIZE-1)*cell);
+
   const prim=document.createElementNS(svgNS,'line');
   prim.setAttribute('x1',cx); prim.setAttribute('y1',cy);
   prim.setAttribute('x2',ex); prim.setAttribute('y2',ey);
   prim.setAttribute('class','ga-primary'+(ok?'':' ga-invalid'));
   prim.setAttribute('marker-end', ok?'url(#headPrimary)':'url(#headInvalid)');
   guide.appendChild(prim);
+
   const label=document.createElementNS(svgNS,'text');
   label.setAttribute('x', ex + (dir.x===1?10: dir.x===-1?-10:0));
   label.setAttribute('y', ey + (dir.y===1?18: dir.y===-1?-10:-12));
@@ -274,12 +267,13 @@ function drawFirstArrow(dir){
   label.setAttribute('class','ga-label');
   label.textContent = ok ? 'then choose ⟂' : 'out of bounds';
   guide.appendChild(label);
+
   if(!ok) return;
   const hints=[];
   if(dir.x!==0){ hints.push({hx:tx,hy:ty+1}); hints.push({hx:tx,hy:ty-1}); }
   else         { hints.push({hx:tx+1,hy:ty}); hints.push({hx:tx-1,hy:ty}); }
-  for (let i=0;i<hints.length;i++){
-    const h=hints[i]; if(!inside(h.hx,h.hy)) continue;
+  for (const h of hints){
+    if(!inside(h.hx,h.hy)) continue;
     const hx=h.hx*cell+cell/2, hy=h.hy*cell+cell/2;
     const line=document.createElementNS(svgNS,'line');
     line.setAttribute('x1',ex); line.setAttribute('y1',ey);
@@ -290,21 +284,13 @@ function drawFirstArrow(dir){
   }
 }
 
-// --------------------------------------------------------
-//                   MOVE DOTS (always visible)
-// --------------------------------------------------------
-const knightOffsets = [
-  {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
-  {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
-];
+/* ---------- Move dots ---------- */
 let dots=[];
 function updateDots(){
-  for (let i=0;i<dots.length;i++) dots[i].remove();
-  dots=[];
+  dots.forEach(d=>d.remove()); dots=[];
   if (!running) return;
   const cell=CELL();
-  for (let i=0;i<knightOffsets.length;i++){
-    const o=knightOffsets[i];
+  for (const o of knightOffsets){
     const tx=knight.x+o.x, ty=knight.y+o.y;
     if (!inside(tx,ty)) continue;
     const dot=document.createElement('div'); dot.className='dot';
@@ -315,17 +301,12 @@ function updateDots(){
   }
 }
 
-// --------------------------------------------------------
-//                         ENEMIES (declared once)
-// --------------------------------------------------------
-let enemies = [];
+/* ---------- Power-ups ---------- */
+let powerups=[];
+const POWER_TYPES=['shield','speed','slow','clear'];
+const POWER_GLYPH={ shield:'🛡', speed:'⚡', slow:'🕒', clear:'💥' };
+let shield=0, speedMoves=0, slowUntil=0, slowFactor=1.0;
 
-// --------------------------------------------------------
-//                       POWER-UPS
-// --------------------------------------------------------
-let powerups = [];
-const POWER_TYPES = ['shield','speed','slow','clear'];
-const POWER_GLYPH = { shield:'🛡', speed:'⚡', slow:'🕒', clear:'💥' };
 function spawnPowerUp(){
   let tries=20;
   while(tries-- > 0){
@@ -342,6 +323,13 @@ function spawnPowerUp(){
     SFX.spawnPower(); break;
   }
 }
+function applyPower(type,x,y){
+  sparkle(x,y);
+  if (type==='shield'){ shield=1; bShield.classList.add('active'); SFX.pickupShield(); }
+  if (type==='speed'){ speedMoves=3; bSpeed.classList.add('active'); SFX.pickupSpeed(); }
+  if (type==='slow'){ slowUntil=performance.now()+5000; slowFactor=0.5; bSlow.classList.add('active'); SFX.pickupSlow(); }
+  if (type==='clear'){ enemies.forEach(e=>e.el && e.el.remove()); enemies=[]; SFX.pickupClear(); }
+}
 function pickupAt(x,y){
   for (let i=powerups.length-1;i>=0;i--){
     const p=powerups[i];
@@ -352,14 +340,6 @@ function pickupAt(x,y){
       powerups.splice(i,1);
     }
   }
-}
-let shield=0, speedMoves=0, slowUntil=0, slowFactor=1.0;
-function applyPower(type,x,y){
-  sparkle(x,y);
-  if (type==='shield'){ shield=1; bShield.classList.add('active'); SFX.pickupShield(); }
-  if (type==='speed'){ speedMoves=3; bSpeed.classList.add('active'); SFX.pickupSpeed(); }
-  if (type==='slow'){ slowUntil=performance.now()+5000; slowFactor=0.5; bSlow.classList.add('active'); SFX.pickupSlow(); }
-  if (type==='clear'){ enemies.forEach(e=>e.el && e.el.remove()); enemies=[]; SFX.pickupClear(); }
 }
 function sparkle(x,y){
   const cell=CELL();
@@ -372,16 +352,17 @@ function sparkle(x,y){
   }
 }
 
-// --------------------------------------------------------
-//                         ENEMY LOGIC
-// --------------------------------------------------------
-const BASE_SPEED = { pawn:1.15, bishop:2.30, rook:3.20, queen:1.40 }; // cells/sec
+/* ---------- Enemies ---------- */
+let enemies=[];
+const BASE_SPEED={ pawn:1.15, bishop:2.30, rook:3.20, queen:1.40 }; // cells/sec
+
 function spawnEnemy(){
-  const r=Math.random(); const type = (r>0.85)?'queen' : (r>0.65)?'rook' : (r>0.40)?'bishop' : 'pawn';
+  const r=Math.random(); const type=(r>0.85)?'queen' : (r>0.65)?'rook' : (r>0.40)?'bishop' : 'pawn';
   const x=(Math.random()*SIZE)|0, y=-1;
   const el=document.createElement('div'); el.className='piece enemy'; el.setAttribute('data-glyph', GLYPHS[type]); el.textContent='';
   game.appendChild(el);
   const px=x*CELL(), py=y*CELL();
+
   if (type==='queen'){
     const e={el,type,px,py,qx:x,qy:y,qtx:x,qty:0,qtpX:x*CELL(),qtpY:0,stepSpeed:BASE_SPEED.queen};
     pickNextQueenTarget(e); e.qtpX=e.qtx*CELL(); e.qtpY=e.qty*CELL();
@@ -393,13 +374,14 @@ function spawnEnemy(){
     if (e.btx<0||e.btx>=SIZE){ e.bdir=-e.bdir; e.btx=e.bx+e.bdir; e.btpX=e.btx*CELL(); }
     el.style.left=px+'px'; el.style.top=py+'px'; enemies.push(e); return;
   }
-  let vxCells=0, vyCells=BASE_SPEED[type]; if (type==='rook'){ vxCells=0; vyCells=BASE_SPEED.rook; }
+  let vxCells=0, vyCells=BASE_SPEED[type];
+  if (type==='rook'){ vxCells=0; vyCells=BASE_SPEED.rook; }
   const e={el,type,px,py,vxCells,vyCells}; el.style.left=px+'px'; el.style.top=py+'px'; enemies.push(e);
 }
 function pickNextQueenTarget(e){
   const cx=e.qx, cy=e.qy, ny=cy+1; const options=[];
-  for (let i=-1;i<=1;i++){ const nx=cx+i; if(nx>=0&&nx<SIZE) options.push(nx); }
-  const nx = options.length ? options[(Math.random()*options.length)|0] : cx;
+  for(let i=-1;i<=1;i++){ const nx=cx+i; if(nx>=0&&nx<SIZE) options.push(nx); }
+  const nx=options.length ? options[(Math.random()*options.length)|0] : cx;
   e.qtx=nx; e.qty=ny;
 }
 function pickNextBishopTarget(e){
@@ -408,17 +390,11 @@ function pickNextBishopTarget(e){
   e.btx=nx; e.bty=ny;
 }
 
-// --------------------------------------------------------
-//                  DIFFICULTY & SPAWNS  (declared once)
-// --------------------------------------------------------
-let running   = true;
-let startTime = performance.now();
-let lastTime  = startTime;
-let speedMult = 1.0;
-let spawnTimer = null;
-let difficultyTimer = null;
-
+/* ---------- Difficulty / Spawns ---------- */
+let running=true, startTime=performance.now(), lastTime=startTime, speedMult=1.0;
+let spawnTimer=null, difficultyTimer=null;
 const baseSpawnDelay=1500;
+
 function scheduleSpawn(){
   const next=Math.max(80, baseSpawnDelay/(speedMult*(slowFactor||1)));
   spawnTimer=setTimeout(function tick(){
@@ -437,14 +413,12 @@ function scheduleDifficulty(){
   }, 6000);
 }
 
-// --------------------------------------------------------
-//                 MOVEMENT & COLLISIONS
-// --------------------------------------------------------
+/* ---------- Movement & Collisions ---------- */
 function clampX(px){ const max=(SIZE-1)*CELL(); return px<0?0:(px>max?max:px); }
 function moveEnemiesSmooth(dt){
   const dtSec=dt/1000, nowT=performance.now();
 
-  // expire powerups safely
+  // expire powerups
   for (let i=powerups.length-1;i>=0;i--){
     const p=powerups[i];
     if (!p || !p.el){ powerups.splice(i,1); continue; }
@@ -486,66 +460,55 @@ function moveEnemiesSmooth(dt){
     if (e.py>SIZE*CELL()){ e.el.remove(); enemies.splice(i,1); }
   }
 
-  // danger glow
+  // danger glow on knight
   let danger=false;
-  for (let i=0;i<knightOffsets.length;i++){
-    const o=knightOffsets[i], tx=knight.x+o.x, ty=knight.y+o.y;
+  for (const o of knightOffsets){
+    const tx=knight.x+o.x, ty=knight.y+o.y;
     if (!inside(tx,ty)) continue;
-    for (let j=0;j<enemies.length;j++){
-      const e=enemies[j];
-      if (Math.round(e.px/CELL())===tx && Math.round(e.py/CELL())===ty){ danger=true; break; }
-    }
-    if (danger) break;
+    if (enemies.some(e => Math.round(e.px/CELL())===tx && Math.round(e.py/CELL())===ty)){ danger=true; break; }
   }
   knightEl.classList.toggle('danger', danger);
 }
 function checkCollision(){
-  for (let i=0;i<enemies.length;i++){
-    const e=enemies[i];
-    if (Math.round(e.px/CELL())===knight.x && Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y){
-      // (extra guard above; main check below)
-    }
-    if (Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y){
-      if (shield>0){
-        shield=0; bShield.classList.remove('active');
-        enemies = enemies.filter(en => !(Math.round(en.px/CELL())===knight.x && Math.round(en.py/CELL())===knight.y));
-        SFX.shieldHit();
-      } else { gameOver(); }
-      return;
-    }
+  if (enemies.some(e=> Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y )){
+    if (shield>0){
+      shield=0; bShield.classList.remove('active');
+      enemies = enemies.filter(e => !(Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y));
+      SFX.shieldHit();
+    } else { gameOver(); }
   }
 }
 
-// --------------------------------------------------------
-//                    KNIGHT MOVEMENT
-// --------------------------------------------------------
+/* ---------- Knight movement ---------- */
 function moveKnightTo(tx,ty){
   if (!inside(tx,ty)) return;
   knight.x=tx; knight.y=ty; placeKnight();
   SFX.jump(); pickupAt(tx,ty); checkCollision(); updateDots(); clearGuide();
   if (speedMoves>0){ speedMoves--; if (speedMoves===0) bSpeed.classList.remove('active'); }
 }
-const DIRS = { up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
+
+const DIRS={ up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
 let arrowStep=0, firstArrow=null;
 document.addEventListener('keydown', (e)=>{
   if (!running) return;
   const k=e.key.replace('Arrow','').toLowerCase();
   const dir=DIRS[k]; if (!dir) return;
   e.preventDefault();
+
   if (arrowStep===0){ firstArrow=dir; arrowStep=1; drawFirstArrow(dir); return; }
   const dx2=firstArrow.x*2, dy2=firstArrow.y*2;
   let tx=knight.x, ty=knight.y;
+
   if (firstArrow.x!==0 && dir.y!==0){ tx+=dx2; ty+=dir.y; }
   else if (firstArrow.y!==0 && dir.x!==0){ tx+=dir.x; ty+=dy2; }
   else if (firstArrow.x===-dir.x && firstArrow.y===-dir.y){ arrowStep=0; firstArrow=null; clearGuide(); return; }
   else { arrowStep=0; firstArrow=null; clearGuide(); return; }
+
   if (!inside(tx,ty)){ arrowStep=0; firstArrow=null; clearGuide(); return; }
   arrowStep=0; firstArrow=null; clearGuide(); moveKnightTo(tx,ty);
 }, {passive:false});
 
-// --------------------------------------------------------
-//                    GAME LOOP / START
-// --------------------------------------------------------
+/* ---------- Loop / Start / Restart ---------- */
 function loop(t){
   if (!running) return;
   const dt=t-lastTime; lastTime=t;
@@ -553,32 +516,34 @@ function loop(t){
   scoreEl.textContent=((t-startTime)/1000).toFixed(1);
   requestAnimationFrame(loop);
 }
-function startGame(){
+
+function scheduleStart(){
   updateDots(); scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
   applyMuteUI(); Music.setEnabled(audio.enabled); krFitBoard();
 }
-startGame();
+scheduleStart();
 
-// --------------------------------------------------------
-//                   GAME OVER / RESTART
-// --------------------------------------------------------
 function gameOver(){
   if (!running) return;
   running=false; clearTimeout(spawnTimer); clearInterval(difficultyTimer);
   dots.forEach(d=>d.remove()); dots=[]; clearGuide();
   game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'),350);
   SFX.gameOver(); Music.stop();
+
   const over=document.createElement('div'); over.id='over';
   const finalScore=parseFloat(scoreEl.textContent)||0;
-  over.innerHTML='<h2>Game Over</h2><p>You survived <strong>'+finalScore.toFixed(1)+'s</strong></p>'
-    +'<div id="saveRow"><input id="playerName" maxlength="16" placeholder="Your name"><button id="saveBtn">Save Score</button></div>'
-    +'<button id="restart">Play Again</button>';
+  over.innerHTML=
+    '<h2>Game Over</h2><p>You survived <strong>'+finalScore.toFixed(1)+'s</strong></p>'+
+    '<div id="saveRow"><input id="playerName" maxlength="16" placeholder="Your name"><button id="saveBtn">Save Score</button></div>'+
+    '<button id="restart">Play Again</button>';
   game.appendChild(over); over.style.display='flex';
+
   const nameInput=over.querySelector('#playerName');
   const saveBtn=over.querySelector('#saveBtn');
   const restartBtn=over.querySelector('#restart');
   const lastName=localStorage.getItem('knightRunner_lastName')||'';
   if (lastName) nameInput.value=lastName;
+
   saveBtn.addEventListener('click', ()=>{
     const name=(nameInput.value||'Player').trim();
     localStorage.setItem('knightRunner_lastName', name);
@@ -588,34 +553,35 @@ function gameOver(){
   });
   restartBtn.addEventListener('click', restart);
 }
+
 function restart(){
   enemies.forEach(e=>e.el && e.el.remove()); enemies=[];
   powerups.forEach(p=>p && p.el && p.el.remove()); powerups.length=0;
   const over=document.getElementById('over'); if (over) over.remove();
+
   speedMult=1.0; slowFactor=1.0; slowUntil=0; shield=0; speedMoves=0;
   bShield.classList.remove('active'); bSpeed.classList.remove('active'); bSlow.classList.remove('active');
   speedEl.textContent='1.0×';
+
   startTime=performance.now(); lastTime=startTime;
   knight={x:3,y:6}; placeKnight(); arrowStep=0; firstArrow=null; clearGuide();
+
   running=true; updateDots(); clearTimeout(spawnTimer); clearInterval(difficultyTimer);
   scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
+
   SFX.restart(); Music.start(); krFitBoard();
 }
 
-// --------------------------------------------------------
-//                    RESIZE SYNC / VIEWBOX
-// --------------------------------------------------------
+/* ---------- Resize sync ---------- */
 if (typeof ResizeObserver !== 'undefined'){
-  const ro = new ResizeObserver(()=>{
-    // Squares are grid children; no per-square positioning needed.
-    placeKnight();
-    updateDots();
-    guide.setAttribute('viewBox', '0 0 ' + (CELL()*SIZE) + ' ' + (CELL()*SIZE));
+  const ro=new ResizeObserver(()=>{
+    placeKnight(); updateDots();
+    guide.setAttribute('viewBox','0 0 '+(CELL()*SIZE)+' '+(CELL()*SIZE));
   });
   ro.observe(game);
 } else {
-  window.addEventListener('resize', ()=>{
+  addEventListener('resize', ()=>{
     placeKnight(); updateDots();
-    guide.setAttribute('viewBox', '0 0 ' + (CELL()*SIZE) + ' ' + (CELL()*SIZE));
+    guide.setAttribute('viewBox','0 0 '+(CELL()*SIZE)+' '+(CELL()*SIZE));
   }, {passive:true});
 }
