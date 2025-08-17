@@ -1,5 +1,5 @@
 // =========================================================
-// Knight Runner — main.js (8x8 fit + ALWAYS no page scroll + reliable SFX)
+// Knight Runner — main.js (8×8 CSS grid + no page scroll + reliable SFX)
 // =========================================================
 /* global ResizeObserver */
 'use strict';
@@ -16,91 +16,77 @@ const toggleLB = document.getElementById('toggleLB');
 const bShield  = document.getElementById('bShield');
 const bSpeed   = document.getElementById('bSpeed');
 const bSlow    = document.getElementById('bSlow');
-const hud      = document.querySelector('.hud');
-const leaderboardEl = document.getElementById('leaderboard');
 
 // ---------- Constants ----------
 const SIZE = 8;
-function CELL(){
-  const v = parseFloat(getComputedStyle(root).getPropertyValue('--cell'));
-  return isNaN(v) ? (game.clientWidth/8 || 64) : v;
-}
-const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
+const GLYPHS = { knight:'♘', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; // white knight glyph
 function inside(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
 function clamp(v,a,b){ return v<a?a : (v>b?b:v); }
+// Always compute cell from *actual* board width (works with CSS grid)
+function CELL(){ return game.clientWidth / SIZE; }
 
 // --------------------------------------------------------
-//            BOARD FIT + FORCE NO PAGE SCROLL
+//            Fit board & FORCE no page scroll
 // --------------------------------------------------------
 function krFitBoard(){
-  var vw = window.innerWidth  || document.documentElement.clientWidth  || 800;
-  var vh = window.innerHeight || document.documentElement.clientHeight || 600;
+  const vw = window.innerWidth  || document.documentElement.clientWidth  || 800;
+  const vh = window.innerHeight || document.documentElement.clientHeight || 600;
 
-  // Measure live heights so expanded leaderboard is accounted for
-  var hudEl = document.querySelector('.hud');
-  var lbEl  = document.getElementById('leaderboard');
-  var hudH = hudEl ? Math.ceil(hudEl.getBoundingClientRect().height) : 0;
-  var lbH  = lbEl  ? Math.ceil(lbEl.getBoundingClientRect().height)  : 0;
+  const hudEl = document.querySelector('.hud');
+  const lbEl  = document.getElementById('leaderboard');
+  const hudH = hudEl ? Math.ceil(hudEl.getBoundingClientRect().height) : 0;
+  const lbH  = lbEl  ? Math.ceil(lbEl.getBoundingClientRect().height)  : 0;
 
-  var verticalPad = 16;
+  const verticalPad = 16;
+  const maxByHeight = Math.max(200, vh - hudH - verticalPad - 8);
+  const maxByWidth  = Math.max(200, vw - 16);
+  const size = Math.floor(Math.min(maxByHeight, maxByWidth));
 
-  // Size the board so hud + board + leaderboard fit within the visual viewport.
-  var maxByHeight = Math.max(200, vh - hudH - verticalPad - 8);
-  var maxByWidth  = Math.max(200, vw - 16);
-  var size = Math.floor(Math.min(maxByHeight, maxByWidth));
-
-  // Keep board strictly 8×8
   root.style.setProperty('--board', size + 'px');
   root.style.setProperty('--cell',  (size/8) + 'px');
 
-  // 🚫 Always disable page scrolling
+  // 🚫 Always no page scroll
   document.documentElement.style.overflow = 'hidden';
   document.body.style.overflow = 'hidden';
-  // iOS-friendly viewport height lock
   document.documentElement.style.height = '100dvh';
   document.body.style.height = '100dvh';
 }
-window.krFitBoard = krFitBoard;
-
 window.addEventListener('resize', krFitBoard, {passive:true});
 window.addEventListener('orientationchange', () => setTimeout(krFitBoard, 150), {passive:true});
-
-// Early fit so CELL() is correct before building board
-krFitBoard();
+krFitBoard(); // early sizing
 
 // --------------------------------------------------------
 //                          AUDIO
 // --------------------------------------------------------
 const MUTE_KEY = 'KR_mute';
 let audio = { ctx:null, enabled:true, unlocked:false };
-try { audio.enabled = (localStorage.getItem(MUTE_KEY) !== 'true'); } catch(e){}
+try { audio.enabled = (localStorage.getItem(MUTE_KEY) !== 'true'); } catch{}
 
 function ensureAudio(){ if (!audio.ctx) audio.ctx = new (window.AudioContext||window.webkitAudioContext)(); }
 function now(){ ensureAudio(); return audio.ctx.currentTime; }
 function unlockAudio(){
   if (audio.unlocked) return;
   ensureAudio();
-  try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch(e){}
+  try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch{}
   try {
     const s = audio.ctx.createBufferSource();
     s.buffer = audio.ctx.createBuffer(1, 1, 22050);
     s.connect(audio.ctx.destination);
     s.start(0);
-  } catch(e){}
+  } catch{}
   audio.unlocked = true;
   Music.start();
 }
-// Catch many gesture types (iPad-friendly)
 ['pointerdown','touchstart','mousedown','keydown','click'].forEach(evt=>{
   document.addEventListener(evt, unlockAudio, {once:true, passive:true});
 });
 
 function tone(o){
-  o = o||{};
+  o=o||{};
   ensureAudio();
-  try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch(e){}
-  const freq=o.freq||440, type=o.type||'sine', dur=o.dur||0.12, gain=o.gain||0.05;
-  const attack=o.attack||0.01, release=o.release||0.12, slideTo=(o.slideTo==null?null:o.slideTo), slideTime=o.slideTime||0.08;
+  try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch{}
+  const freq=o.freq||440, type=o.type||'sine', dur=o.dur||0.12, gain=o.gain||0.05, attack=o.attack||0.01, release=o.release||0.12;
+  const slideTo=(o.slideTo==null?null:o.slideTo), slideTime=o.slideTime||0.08;
   if (!audio.enabled) return;
   const t0 = now();
   const osc = audio.ctx.createOscillator();
@@ -163,17 +149,17 @@ const Music = (function(){
 function applyMuteUI(){ if(!muteBtn) return; muteBtn.textContent = audio.enabled ? '🔊' : '🔇'; muteBtn.setAttribute('aria-pressed', String(!audio.enabled)); Music.setEnabled(audio.enabled); }
 applyMuteUI();
 if (muteBtn){
-  muteBtn.addEventListener('click', function(){
+  muteBtn.addEventListener('click', ()=>{
     unlockAudio();
-    try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch(e){}
+    try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch{}
     audio.enabled=!audio.enabled;
-    try{ localStorage.setItem(MUTE_KEY,String(!audio.enabled)); }catch(e){}
+    try{ localStorage.setItem(MUTE_KEY,String(!audio.enabled)); }catch{}
     applyMuteUI();
   });
 }
-document.addEventListener('visibilitychange', function(){
+document.addEventListener('visibilitychange', ()=>{
   if (document.visibilityState === 'visible' && audio.ctx) {
-    try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch(e){}
+    try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch{}
   }
 });
 
@@ -181,8 +167,8 @@ document.addEventListener('visibilitychange', function(){
 //                      LEADERBOARD (local)
 // --------------------------------------------------------
 const LS_KEY = 'knightRunnerTopScores_v1';
-function loadScores(){ try{ const raw=localStorage.getItem(LS_KEY); const a=raw?JSON.parse(raw):[]; return Array.isArray(a)?a:[]; }catch(e){ return []; } }
-function saveScores(arr){ try{ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }catch(e){} }
+function loadScores(){ try{ const raw=localStorage.getItem(LS_KEY); const a=raw?JSON.parse(raw):[]; return Array.isArray(a)?a:[]; }catch{ return []; } }
+function saveScores(arr){ try{ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }catch{} }
 function addScore(name, score){
   const list = loadScores(); list.push({ name:(name||'Player').trim(), score:+score, ts:Date.now() });
   list.sort((a,b)=> (b.score - a.score) || (a.ts - b.ts));
@@ -225,16 +211,14 @@ if (toggleLB){
 }
 
 // --------------------------------------------------------
-//                        BUILD BOARD
+//                        BUILD BOARD (CSS grid)
 // --------------------------------------------------------
 const boardFrag = document.createDocumentFragment();
 for (let y=0;y<SIZE;y++){
   for (let x=0;x<SIZE;x++){
     const sq=document.createElement('div');
     sq.className='square ' + ((x+y)%2?'dark':'light');
-    sq.style.left = (x*CELL())+'px';
-    sq.style.top  = (y*CELL())+'px';
-    boardFrag.appendChild(sq);
+    boardFrag.appendChild(sq); // no absolute positioning here
   }
 }
 game.appendChild(boardFrag);
@@ -246,7 +230,7 @@ let knight = { x:3, y:6 };
 const knightEl = document.createElement('div');
 knightEl.className = 'piece knight';
 knightEl.setAttribute('data-glyph', GLYPHS.knight);
-knightEl.textContent = ''; // CSS pseudo uses data-glyph
+knightEl.textContent = ''; // rendered by ::before
 game.appendChild(knightEl);
 function placeKnight(){ knightEl.style.left=(knight.x*CELL())+'px'; knightEl.style.top=(knight.y*CELL())+'px'; }
 placeKnight();
@@ -280,7 +264,11 @@ function drawFirstArrow(dir){
   label.textContent = ok ? 'then choose ⟂' : 'out of bounds'; guide.appendChild(label);
   if(!ok) return;
   const hints=[]; if(dir.x!==0){ hints.push({hx:tx,hy:ty+1}); hints.push({hx:tx,hy:ty-1}); } else { hints.push({hx:tx+1,hy:ty}); hints.push({hx:tx-1,hy:ty}); }
-  for (let i=0;i<hints.length;i++){ const h=hints[i]; if(!inside(h.hx,h.hy)) continue; const hx=h.hx*cell+cell/2, hy=h.hy*cell+cell/2; const line=document.createElementNS(svgNS,'line'); line.setAttribute('x1',ex); line.setAttribute('y1',ey); line.setAttribute('x2',hx); line.setAttribute('y2',hy); line.setAttribute('class','ga-hint'); line.setAttribute('marker-end','url(#headHint)'); guide.appendChild(line); }
+  for (let i=0;i<hints.length;i++){ const h=hints[i]; if(!inside(h.hx,h.hy)) continue;
+    const hx=h.hx*cell+cell/2, hy=h.hy*cell+cell/2;
+    const line=document.createElementNS(svgNS,'line'); line.setAttribute('x1',ex); line.setAttribute('y1',ey); line.setAttribute('x2',hx); line.setAttribute('y2',hy);
+    line.setAttribute('class','ga-hint'); line.setAttribute('marker-end','url(#headHint)'); guide.appendChild(line);
+  }
 }
 
 // --------------------------------------------------------
@@ -303,7 +291,7 @@ function updateDots(){
     const dot=document.createElement('div'); dot.className='dot';
     dot.style.left=(tx*cell)+'px'; dot.style.top=(ty*cell)+'px';
     const inner=document.createElement('span'); dot.appendChild(inner);
-    dot.addEventListener('click', function(){ moveKnightTo(tx,ty); });
+    dot.addEventListener('click', ()=> moveKnightTo(tx,ty));
     game.appendChild(dot); dots.push(dot);
   }
 }
@@ -470,7 +458,7 @@ function moveEnemiesSmooth(dt){
     if (e.py>SIZE*CELL()){ e.el.remove(); enemies.splice(i,1); }
   }
 
-  // danger glow (enemy at a knight move away)
+  // danger glow
   let danger=false;
   for (let i=0;i<knightOffsets.length;i++){
     const o=knightOffsets[i], tx=knight.x+o.x, ty=knight.y+o.y;
@@ -508,7 +496,12 @@ function moveKnightTo(tx,ty){
 }
 const DIRS = { up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0} };
 let arrowStep=0, firstArrow=null;
-function processArrow(dir){
+function drawFirstArrow(dir){ /* defined earlier */ } // keep as defined above
+document.addEventListener('keydown', (e)=>{
+  if (!running) return;
+  const k=e.key.replace('Arrow','').toLowerCase();
+  const dir=DIRS[k]; if (!dir) return;
+  e.preventDefault();
   if (arrowStep===0){ firstArrow=dir; arrowStep=1; drawFirstArrow(dir); return; }
   const dx2=firstArrow.x*2, dy2=firstArrow.y*2;
   let tx=knight.x, ty=knight.y;
@@ -518,17 +511,13 @@ function processArrow(dir){
   else { arrowStep=0; firstArrow=null; clearGuide(); return; }
   if (!inside(tx,ty)){ arrowStep=0; firstArrow=null; clearGuide(); return; }
   arrowStep=0; firstArrow=null; clearGuide(); moveKnightTo(tx,ty);
-}
-document.addEventListener('keydown', (e)=>{
-  if (!running) return;
-  const k=e.key.replace('Arrow','').toLowerCase();
-  const dir=DIRS[k]; if (!dir) return;
-  e.preventDefault(); processArrow(dir);
-}, {passive:false});
+});
 
 // --------------------------------------------------------
 //                    GAME LOOP / START
 // --------------------------------------------------------
+let spawnTimer=null, difficultyTimer=null;
+let startTime=performance.now(), lastTime=startTime, speedMult=1.0, running=true;
 function loop(t){
   if (!running) return;
   const dt=t-lastTime; lastTime=t;
@@ -536,14 +525,14 @@ function loop(t){
   scoreEl.textContent=((t-startTime)/1000).toFixed(1);
   requestAnimationFrame(loop);
 }
+function scheduleSpawn(){ const base=1500; const next=Math.max(80, base/(speedMult*(slowFactor||1)));
+  spawnTimer=setTimeout(function tick(){ if(!running) return; (Math.random()<0.12)?spawnPowerUp():spawnEnemy(); scheduleSpawn(); }, next);
+}
+function scheduleDifficulty(){ difficultyTimer=setInterval(()=>{ if(!running) return; speedMult+=0.4; speedEl.textContent=(speedMult*(slowFactor||1)).toFixed(1)+'×'; clearTimeout(spawnTimer); scheduleSpawn(); }, 6000); }
+
 function startGame(){
-  updateDots();
-  scheduleSpawn();
-  scheduleDifficulty();
-  requestAnimationFrame(loop);
-  applyMuteUI();
-  Music.setEnabled(audio.enabled);
-  krFitBoard();
+  updateDots(); scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
+  applyMuteUI(); Music.setEnabled(audio.enabled); krFitBoard();
 }
 startGame();
 
@@ -587,8 +576,7 @@ function restart(){
   knight={x:3,y:6}; placeKnight(); arrowStep=0; firstArrow=null; clearGuide();
   running=true; updateDots(); clearTimeout(spawnTimer); clearInterval(difficultyTimer);
   scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
-  SFX.restart(); Music.start();
-  krFitBoard();
+  SFX.restart(); Music.start(); krFitBoard();
 }
 
 // --------------------------------------------------------
@@ -596,17 +584,15 @@ function restart(){
 // --------------------------------------------------------
 if (typeof ResizeObserver !== 'undefined'){
   const ro = new ResizeObserver(()=>{
-    const squares=document.querySelectorAll('.square');
-    for (let i=0;i<squares.length;i++){ const sq=squares[i]; const x=i%SIZE, y=(i/SIZE)|0; sq.style.left=(x*CELL())+'px'; sq.style.top=(y*CELL())+'px'; }
+    // Squares are grid children; no per-square positioning needed.
     placeKnight();
+    updateDots();
     guide.setAttribute('viewBox', '0 0 ' + (CELL()*SIZE) + ' ' + (CELL()*SIZE));
   });
   ro.observe(game);
 } else {
   window.addEventListener('resize', ()=>{
-    const squares=document.querySelectorAll('.square');
-    for (let i=0;i<squares.length;i++){ const sq=squares[i]; const x=i%SIZE, y=(i/SIZE)|0; sq.style.left=(x*CELL())+'px'; sq.style.top=(y*CELL())+'px'; }
-    placeKnight();
+    placeKnight(); updateDots();
     guide.setAttribute('viewBox', '0 0 ' + (CELL()*SIZE) + ' ' + (CELL()*SIZE));
   }, {passive:true});
 }
