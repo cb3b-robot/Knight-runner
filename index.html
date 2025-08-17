@@ -1,129 +1,233 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <!-- Disable zoom: maximum-scale=1 + user-scalable=no -->
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Knight Runner</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Knight Runner</title>
+<style>
+  body {
+    margin: 0;
+    font-family: 'Arial', sans-serif;
+    background: linear-gradient(to bottom, #1e1e2f, #3b3b5f);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: #fff;
+    overflow: hidden;
+  }
 
-  <!-- Main CSS (keep exact path/case) -->
-  <link rel="stylesheet" href="style.css?v=no-zoom-1">
+  h1 {
+    margin: 10px;
+    font-size: 2em;
+    text-shadow: 2px 2px 8px #000;
+  }
 
-  <!-- Tiny fallback grid, just in case CSS fails to load -->
-  <style id="board-fallback">
-    :root{ --board:min(92vmin,92svmin); --cell:calc(var(--board)/8); }
-    #game{
-      position:relative; width:var(--board); height:var(--board);
-      border:4px solid #fff; border-radius:12px; overflow:hidden; background:#222;
-    }
-    .square{ position:absolute; width:var(--cell); height:var(--cell); }
-    .light{ background:#f0d9b5; } .dark{ background:#b58863; }
-  </style>
+  #game-container {
+    position: relative;
+    width: 600px;
+    height: 600px;
+    border: 4px solid #fff;
+    border-radius: 10px;
+    background: repeating-linear-gradient(
+      0deg,
+      #3b3b5f,
+      #3b3b5f 50px,
+      #2e2e4a 50px,
+      #2e2e4a 100px
+    );
+    overflow: hidden;
+  }
 
-  <!-- Error overlay (so blank pages show what's wrong) -->
-  <style>
-    #errorOverlay {
-      position: fixed; inset: 0; display: none;
-      background: #1b1b1bcc; color: #fff; z-index: 99999;
-      align-items: flex-start; justify-content: center; padding: 16px; overflow: auto;
-    }
-    #errorOverlay pre {
-      max-width: 900px; width: 100%;
-      background: #2a2a2a; border: 1px solid #ff6b6b; border-radius: 10px;
-      padding: 12px; white-space: pre-wrap; word-break: break-word;
-    }
-  </style>
+  .knight {
+    width: 50px;
+    height: 50px;
+    background: url('https://upload.wikimedia.org/wikipedia/commons/2/28/Chess_nlt45.svg') no-repeat center/contain;
+    position: absolute;
+    transition: top 0.2s, left 0.2s;
+  }
+
+  .obstacle {
+    width: 50px;
+    height: 50px;
+    position: absolute;
+    background: url('https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_pdt45.svg') no-repeat center/contain;
+  }
+
+  #osd-controls {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    width: 250px;
+    justify-content: center;
+    gap: 5px;
+  }
+
+  .osd-button {
+    width: 60px;
+    height: 60px;
+    background: #fff;
+    border-radius: 10px;
+    color: #000;
+    font-weight: bold;
+    font-size: 1.2em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    box-shadow: 2px 2px 6px #000;
+    transition: 0.1s;
+  }
+
+  .osd-button:active {
+    transform: scale(0.95);
+  }
+
+  #score {
+    margin-top: 10px;
+    font-size: 1.2em;
+  }
+
+  #game-over {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 2em;
+    color: #ff4c4c;
+    display: none;
+    text-shadow: 2px 2px 8px #000;
+  }
+</style>
 </head>
 <body>
-  <h1>Knight Runner</h1>
+<h1>Knight Runner</h1>
+<div id="game-container">
+  <div class="knight" id="knight"></div>
+  <div id="game-over">Game Over!</div>
+</div>
+<div id="score">Score: 0</div>
+<div id="osd-controls">
+  <div class="osd-button" data-dir="up-left">UL</div>
+  <div class="osd-button" data-dir="up-right">UR</div>
+  <div class="osd-button" data-dir="right-up">RU</div>
+  <div class="osd-button" data-dir="right-down">RD</div>
+  <div class="osd-button" data-dir="down-right">DR</div>
+  <div class="osd-button" data-dir="down-left">DL</div>
+  <div class="osd-button" data-dir="left-down">LD</div>
+  <div class="osd-button" data-dir="left-up">LU</div>
+</div>
 
-  <!-- HUD -->
-  <div class="hud">
-    <div class="pill">Score: <span id="score">0.0</span>s</div>
-    <div class="pill">Speed: <span id="speed">1.0×</span></div>
-    <div id="status">
-      <div class="badge" id="bShield">🛡 shield</div>
-      <div class="badge" id="bSpeed">⚡ speed</div>
-      <div class="badge" id="bSlow">🕒 slow</div>
-      <button id="muteBtn" aria-pressed="false" title="Mute/Unmute">🔊</button>
-    </div>
-  </div>
+<script>
+const gameContainer = document.getElementById('game-container');
+const knight = document.getElementById('knight');
+const gameOverText = document.getElementById('game-over');
+const scoreDisplay = document.getElementById('score');
 
-  <!-- Game board -->
-  <div id="game"></div>
+const gridSize = 50; // Each cell is 50px
+const containerSize = 600;
+let knightPos = { x: 5, y: 5 }; // starting at center (grid 12x12)
+let score = 0;
+let obstacles = [];
+let gameInterval;
+let moveSequence = []; // stores two-step move sequence
+const knightMoves = {
+  "up-left": [{x:-2,y:-1},{x:-1,y:-2}],
+  "up-right": [{x:2,y:-1},{x:1,y:-2}],
+  "right-up": [{x:1,y:-2},{x:2,y:-1}],
+  "right-down": [{x:1,y:2},{x:2,y:1}],
+  "down-right": [{x:2,y:1},{x:1,y:2}],
+  "down-left": [{x:-2,y:1},{x:-1,y:2}],
+  "left-down": [{x:-1,y:2},{x:-2,y:1}],
+  "left-up": [{x:-1,y:-2},{x:-2,y:-1}]
+};
 
-  <!-- Leaderboard -->
-  <div id="leaderboard">
-    <header>
-      <h3>Leaderboard (This device)</h3>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <div id="lbStatus">saved locally</div>
-        <button id="toggleLB" title="Expand/collapse">Show more</button>
-        <button id="resetScores" title="Clear saved scores">Reset Scores</button>
-      </div>
-    </header>
-    <ol id="lbList"></ol>
-  </div>
+function placeKnight() {
+  knight.style.left = `${knightPos.x * gridSize}px`;
+  knight.style.top = `${knightPos.y * gridSize}px`;
+}
 
-  <!-- Error overlay -->
-  <div id="errorOverlay"><pre id="errorText"></pre></div>
+function addObstacle() {
+  const obstacle = document.createElement('div');
+  obstacle.classList.add('obstacle');
 
-  <!-- Show JS errors on-page -->
-  <script>
-    (function(){
-      const overlay = document.getElementById('errorOverlay');
-      const text = document.getElementById('errorText');
-      function show(msg){
-        overlay.style.display='flex';
-        text.textContent='JavaScript error:\\n\\n' + msg;
-      }
-      addEventListener('error', e=>{
-        show((e.message||'Unknown error') + (e.filename? '\\n'+e.filename:'') + (e.lineno? ':'+e.lineno:''));
-      });
-      addEventListener('unhandledrejection', e=>{
-        show('Unhandled promise: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)));
-      });
-    })();
-  </script>
+  // Random grid position not on knight
+  let pos;
+  do {
+    pos = {x: Math.floor(Math.random()*12), y: Math.floor(Math.random()*12)};
+  } while ((pos.x === knightPos.x && pos.y === knightPos.y) || obstacles.some(o=>o.x===pos.x && o.y===pos.y));
 
-  <!-- 🔒 Disable pinch & double-tap zoom (iOS/Safari friendly) -->
-  <script>
-    (function(){
-      // Prevent two quick taps from zooming
-      var lastTouchEnd = 0;
-      document.addEventListener('touchend', function(e){
-        var now = Date.now();
-        if (now - lastTouchEnd <= 300) {
-          e.preventDefault();
-        }
-        lastTouchEnd = now;
-      }, {passive:false});
+  obstacle.style.left = `${pos.x * gridSize}px`;
+  obstacle.style.top = `${pos.y * gridSize}px`;
 
-      // Block Safari's pinch-zoom gesture events
-      ['gesturestart','gesturechange','gestureend'].forEach(function(ev){
-        document.addEventListener(ev, function(e){ e.preventDefault(); }, {passive:false});
-      });
+  gameContainer.appendChild(obstacle);
+  obstacles.push({el: obstacle, ...pos});
+}
 
-      // Optional: block Ctrl+wheel zoom on desktop
-      document.addEventListener('wheel', function(e){
-        if (e.ctrlKey) e.preventDefault();
-      }, {passive:false});
-    })();
-  </script>
+function checkCollision() {
+  return obstacles.some(o => o.x === knightPos.x && o.y === knightPos.y);
+}
 
-  <!-- ES module entry -->
-  <script type="module" src="./js/main.js?v=no-zoom-1"></script>
+function gameOver() {
+  clearInterval(gameInterval);
+  gameOverText.style.display = 'block';
+}
 
-  <!-- Remove fallback styles if real CSS loaded -->
-  <script>
-    (function(){
-      const computed = getComputedStyle(document.documentElement).getPropertyValue('--board');
-      if (computed && computed.trim() !== '') {
-        const fb = document.getElementById('board-fallback');
-        if (fb) fb.remove();
-      }
-    })();
-  </script>
+function moveKnight(direction) {
+  const moves = knightMoves[direction];
+  if (!moves) return;
+
+  // Perform first move
+  knightPos.x += moves[0].x;
+  knightPos.y += moves[0].y;
+  constrainPosition();
+  placeKnight();
+
+  setTimeout(() => {
+    // Second move
+    knightPos.x += moves[1].x;
+    knightPos.y += moves[1].y;
+    constrainPosition();
+    placeKnight();
+
+    if (checkCollision()) gameOver();
+    else {
+      score++;
+      scoreDisplay.textContent = `Score: ${score}`;
+    }
+  }, 100); // short delay between moves for effect
+}
+
+function constrainPosition() {
+  if (knightPos.x < 0) knightPos.x = 0;
+  if (knightPos.y < 0) knightPos.y = 0;
+  if (knightPos.x > 11) knightPos.x = 11;
+  if (knightPos.y > 11) knightPos.y = 11;
+}
+
+// Keyboard controls
+document.addEventListener('keydown', e => {
+  switch(e.key) {
+    case "ArrowUp": moveKnight("up-left"); break;
+    case "ArrowDown": moveKnight("down-right"); break;
+    case "ArrowLeft": moveKnight("left-up"); break;
+    case "ArrowRight": moveKnight("right-down"); break;
+  }
+});
+
+// On-screen controls
+document.querySelectorAll('.osd-button').forEach(btn => {
+  btn.addEventListener('click', () => moveKnight(btn.dataset.dir));
+});
+
+// Spawn obstacles every 2 seconds
+gameInterval = setInterval(() => {
+  addObstacle();
+  if (checkCollision()) gameOver();
+}, 2000);
+
+// Initial placement
+placeKnight();
+</script>
 </body>
 </html>
