@@ -19,7 +19,9 @@ const bSlow    = document.getElementById('bSlow');
 
 // ---------- Constants ----------
 const SIZE = 8;
-const GLYPHS = { knight:'♘', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; // white knight glyph
+// Use the filled black glyphs, then recolor via CSS.
+// Knight uses ♞ so it appears fully filled in white.
+const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
 function inside(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
 function clamp(v,a,b){ return v<a?a : (v>b?b:v); }
 // Always compute cell from *actual* board width (works with CSS grid)
@@ -33,9 +35,7 @@ function krFitBoard(){
   const vh = window.innerHeight || document.documentElement.clientHeight || 600;
 
   const hudEl = document.querySelector('.hud');
-  const lbEl  = document.getElementById('leaderboard');
   const hudH = hudEl ? Math.ceil(hudEl.getBoundingClientRect().height) : 0;
-  const lbH  = lbEl  ? Math.ceil(lbEl.getBoundingClientRect().height)  : 0;
 
   const verticalPad = 16;
   const maxByHeight = Math.max(200, vh - hudH - verticalPad - 8);
@@ -68,12 +68,7 @@ function unlockAudio(){
   if (audio.unlocked) return;
   ensureAudio();
   try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch{}
-  try {
-    const s = audio.ctx.createBufferSource();
-    s.buffer = audio.ctx.createBuffer(1, 1, 22050);
-    s.connect(audio.ctx.destination);
-    s.start(0);
-  } catch{}
+  try { const s = audio.ctx.createBufferSource(); s.buffer = audio.ctx.createBuffer(1,1,22050); s.connect(audio.ctx.destination); s.start(0);} catch{}
   audio.unlocked = true;
   Music.start();
 }
@@ -230,13 +225,13 @@ let knight = { x:3, y:6 };
 const knightEl = document.createElement('div');
 knightEl.className = 'piece knight';
 knightEl.setAttribute('data-glyph', GLYPHS.knight);
-knightEl.textContent = ''; // rendered by ::before
+knightEl.textContent = ''; // rendered by ::before in CSS
 game.appendChild(knightEl);
 function placeKnight(){ knightEl.style.left=(knight.x*CELL())+'px'; knightEl.style.top=(knight.y*CELL())+'px'; }
 placeKnight();
 
 // --------------------------------------------------------
-//                     SVG ARROW GUIDE (real function)
+//                     SVG ARROW GUIDE
 // --------------------------------------------------------
 const svgNS='http://www.w3.org/2000/svg';
 const guide = document.createElementNS(svgNS,'svg');
@@ -259,7 +254,6 @@ guide.appendChild(defs);
 function clearGuide(){
   while (guide.lastChild && guide.lastChild!==defs) guide.removeChild(guide.lastChild);
 }
-
 function drawFirstArrow(dir){
   clearGuide();
   const cell=CELL();
@@ -267,16 +261,12 @@ function drawFirstArrow(dir){
   const tx=knight.x+dir.x*2, ty=knight.y+dir.y*2;
   const ok = inside(tx,ty);
   const ex=clamp(tx*cell+cell/2,0,(SIZE-1)*cell), ey=clamp(ty*cell+cell/2,0,(SIZE-1)*cell);
-
-  // primary arrow (first step of L)
   const prim=document.createElementNS(svgNS,'line');
   prim.setAttribute('x1',cx); prim.setAttribute('y1',cy);
   prim.setAttribute('x2',ex); prim.setAttribute('y2',ey);
   prim.setAttribute('class','ga-primary'+(ok?'':' ga-invalid'));
   prim.setAttribute('marker-end', ok?'url(#headPrimary)':'url(#headInvalid)');
   guide.appendChild(prim);
-
-  // label
   const label=document.createElementNS(svgNS,'text');
   label.setAttribute('x', ex + (dir.x===1?10: dir.x===-1?-10:0));
   label.setAttribute('y', ey + (dir.y===1?18: dir.y===-1?-10:-12));
@@ -284,10 +274,7 @@ function drawFirstArrow(dir){
   label.setAttribute('class','ga-label');
   label.textContent = ok ? 'then choose ⟂' : 'out of bounds';
   guide.appendChild(label);
-
   if(!ok) return;
-
-  // perpendicular hints
   const hints=[];
   if(dir.x!==0){ hints.push({hx:tx,hy:ty+1}); hints.push({hx:tx,hy:ty-1}); }
   else         { hints.push({hx:tx+1,hy:ty}); hints.push({hx:tx-1,hy:ty}); }
@@ -327,6 +314,11 @@ function updateDots(){
     game.appendChild(dot); dots.push(dot);
   }
 }
+
+// --------------------------------------------------------
+//                         ENEMIES (declared once)
+// --------------------------------------------------------
+let enemies = [];
 
 // --------------------------------------------------------
 //                       POWER-UPS
@@ -381,9 +373,8 @@ function sparkle(x,y){
 }
 
 // --------------------------------------------------------
-//                         ENEMIES
+//                         ENEMY LOGIC
 // --------------------------------------------------------
-let enemies = [];
 const BASE_SPEED = { pawn:1.15, bishop:2.30, rook:3.20, queen:1.40 }; // cells/sec
 function spawnEnemy(){
   const r=Math.random(); const type = (r>0.85)?'queen' : (r>0.65)?'rook' : (r>0.40)?'bishop' : 'pawn';
@@ -418,10 +409,15 @@ function pickNextBishopTarget(e){
 }
 
 // --------------------------------------------------------
-//                  DIFFICULTY & SPAWNS
+//                  DIFFICULTY & SPAWNS  (declared once)
 // --------------------------------------------------------
-let running=true, startTime=performance.now(), lastTime=startTime, speedMult=1.0;
-let spawnTimer=null, difficultyTimer=null;
+let running   = true;
+let startTime = performance.now();
+let lastTime  = startTime;
+let speedMult = 1.0;
+let spawnTimer = null;
+let difficultyTimer = null;
+
 const baseSpawnDelay=1500;
 function scheduleSpawn(){
   const next=Math.max(80, baseSpawnDelay/(speedMult*(slowFactor||1)));
@@ -506,6 +502,9 @@ function moveEnemiesSmooth(dt){
 function checkCollision(){
   for (let i=0;i<enemies.length;i++){
     const e=enemies[i];
+    if (Math.round(e.px/CELL())===knight.x && Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y){
+      // (extra guard above; main check below)
+    }
     if (Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y){
       if (shield>0){
         shield=0; bShield.classList.remove('active');
@@ -547,8 +546,6 @@ document.addEventListener('keydown', (e)=>{
 // --------------------------------------------------------
 //                    GAME LOOP / START
 // --------------------------------------------------------
-let spawnTimer=null, difficultyTimer=null;
-let startTime=performance.now(), lastTime=startTime, speedMult=1.0, running=true;
 function loop(t){
   if (!running) return;
   const dt=t-lastTime; lastTime=t;
@@ -556,11 +553,6 @@ function loop(t){
   scoreEl.textContent=((t-startTime)/1000).toFixed(1);
   requestAnimationFrame(loop);
 }
-function scheduleSpawn(){ const next=Math.max(80, 1500/(speedMult*(slowFactor||1)));
-  spawnTimer=setTimeout(function tick(){ if(!running) return; (Math.random()<0.12)?spawnPowerUp():spawnEnemy(); scheduleSpawn(); }, next);
-}
-function scheduleDifficulty(){ difficultyTimer=setInterval(()=>{ if(!running) return; speedMult+=0.4; speedEl.textContent=(speedMult*(slowFactor||1)).toFixed(1)+'×'; clearTimeout(spawnTimer); scheduleSpawn(); }, 6000); }
-
 function startGame(){
   updateDots(); scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
   applyMuteUI(); Music.setEnabled(audio.enabled); krFitBoard();
