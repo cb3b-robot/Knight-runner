@@ -1,5 +1,5 @@
 // =========================================================
-// Knight Runner — main.js (8x8 fit + no-scroll-lock + reliable SFX)
+// Knight Runner — main.js (8x8 fit + ALWAYS no page scroll + reliable SFX)
 // =========================================================
 /* global ResizeObserver */
 'use strict';
@@ -30,7 +30,7 @@ function inside(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
 function clamp(v,a,b){ return v<a?a : (v>b?b:v); }
 
 // --------------------------------------------------------
-//            BOARD FIT (no scroll lock, zoom blocked in HTML)
+//            BOARD FIT + FORCE NO PAGE SCROLL
 // --------------------------------------------------------
 function krFitBoard(){
   var vw = window.innerWidth  || document.documentElement.clientWidth  || 800;
@@ -44,20 +44,26 @@ function krFitBoard(){
 
   var verticalPad = 16;
 
+  // Size the board so hud + board + leaderboard fit within the visual viewport.
   var maxByHeight = Math.max(200, vh - hudH - verticalPad - 8);
   var maxByWidth  = Math.max(200, vw - 16);
   var size = Math.floor(Math.min(maxByHeight, maxByWidth));
 
   // Keep board strictly 8×8
-  document.documentElement.style.setProperty('--board', size + 'px');
-  document.documentElement.style.setProperty('--cell',  (size/8) + 'px');
+  root.style.setProperty('--board', size + 'px');
+  root.style.setProperty('--cell',  (size/8) + 'px');
 
-  // ✅ Do NOT lock scroll here; zoom is disabled via meta + handlers in index.html
+  // 🚫 Always disable page scrolling
+  document.documentElement.style.overflow = 'hidden';
+  document.body.style.overflow = 'hidden';
+  // iOS-friendly viewport height lock
+  document.documentElement.style.height = '100dvh';
+  document.body.style.height = '100dvh';
 }
 window.krFitBoard = krFitBoard;
 
 window.addEventListener('resize', krFitBoard, {passive:true});
-window.addEventListener('orientationchange', function(){ setTimeout(krFitBoard, 150); }, {passive:true});
+window.addEventListener('orientationchange', () => setTimeout(krFitBoard, 150), {passive:true});
 
 // Early fit so CELL() is correct before building board
 krFitBoard();
@@ -85,7 +91,7 @@ function unlockAudio(){
   Music.start();
 }
 // Catch many gesture types (iPad-friendly)
-['pointerdown','touchstart','mousedown','keydown','click'].forEach(function(evt){
+['pointerdown','touchstart','mousedown','keydown','click'].forEach(evt=>{
   document.addEventListener(evt, unlockAudio, {once:true, passive:true});
 });
 
@@ -179,7 +185,7 @@ function loadScores(){ try{ const raw=localStorage.getItem(LS_KEY); const a=raw?
 function saveScores(arr){ try{ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }catch(e){} }
 function addScore(name, score){
   const list = loadScores(); list.push({ name:(name||'Player').trim(), score:+score, ts:Date.now() });
-  list.sort(function(a,b){ return (b.score - a.score) || (a.ts - b.ts); });
+  list.sort((a,b)=> (b.score - a.score) || (a.ts - b.ts));
   const top = list.slice(0, 50); saveScores(top); return top;
 }
 function renderLeaderboard(myName,myScore){
@@ -198,11 +204,11 @@ function renderLeaderboard(myName,myScore){
     if(myName && myScore!=null && e.name===myName && Math.abs(e.score-myScore)<1e-6){ name.style.color='#2ecc71'; sc.style.color='#2ecc71'; }
     lbList.appendChild(li); lbList.appendChild(name); lbList.appendChild(sc);
   }
-  krFitBoard(); // re-fit after list height changes
+  krFitBoard(); // keep layout tight if list height changed
 }
 renderLeaderboard();
 if (resetBtn){
-  resetBtn.addEventListener('click', function(){
+  resetBtn.addEventListener('click', ()=>{
     if (confirm('Clear all saved scores on this device?')) {
       localStorage.removeItem(LS_KEY);
       renderLeaderboard();
@@ -210,7 +216,7 @@ if (resetBtn){
   });
 }
 if (toggleLB){
-  toggleLB.addEventListener('click', function(){
+  toggleLB.addEventListener('click', ()=>{
     const lb=document.getElementById('leaderboard');
     lb.classList.toggle('expanded');
     toggleLB.textContent = lb.classList.contains('expanded') ? 'Show less' : 'Show more';
@@ -313,7 +319,7 @@ function spawnPowerUp(){
   while(tries-- > 0){
     const x=(Math.random()*SIZE)|0, y=(Math.random()*(SIZE-1))|0;
     if (x===knight.x && y===knight.y) continue;
-    if (enemies.some(function(e){ return Math.round(e.px/CELL())===x && Math.round(e.py/CELL())===y; })) continue;
+    if (enemies.some(e=> Math.round(e.px/CELL())===x && Math.round(e.py/CELL())===y )) continue;
     const type=POWER_TYPES[(Math.random()*POWER_TYPES.length)|0];
     const el=document.createElement('div'); el.className='power';
     el.style.left=(x*CELL())+'px'; el.style.top=(y*CELL())+'px';
@@ -330,7 +336,7 @@ function pickupAt(x,y){
     if(!p || !p.el){ powerups.splice(i,1); continue; }
     if(p.x===x && p.y===y){
       applyPower(p.type,x,y);
-      p.el.classList.add('fade'); setTimeout(function(){ if(p.el) p.el.remove(); },450);
+      p.el.classList.add('fade'); setTimeout(()=>{ if(p.el) p.el.remove(); },450);
       powerups.splice(i,1);
     }
   }
@@ -341,7 +347,7 @@ function applyPower(type,x,y){
   if (type==='shield'){ shield=1; bShield.classList.add('active'); SFX.pickupShield(); }
   if (type==='speed'){ speedMoves=3; bSpeed.classList.add('active'); SFX.pickupSpeed(); }
   if (type==='slow'){ slowUntil=performance.now()+5000; slowFactor=0.5; bSlow.classList.add('active'); SFX.pickupSlow(); }
-  if (type==='clear'){ for (let i=0;i<enemies.length;i++){ const e=enemies[i]; if(e.el) e.el.remove(); } enemies=[]; SFX.pickupClear(); }
+  if (type==='clear'){ enemies.forEach(e=>e.el && e.el.remove()); enemies=[]; SFX.pickupClear(); }
 }
 function sparkle(x,y){
   const cell=CELL();
@@ -350,7 +356,7 @@ function sparkle(x,y){
     s.style.left=(x*cell + cell*0.37 + Math.random()*cell*0.26)+'px';
     s.style.top =(y*cell + cell*0.37 + Math.random()*cell*0.26)+'px';
     s.style.background = (i%2? '#2ecc71':'#fff');
-    game.appendChild(s); setTimeout(function(){ s.remove(); },600);
+    game.appendChild(s); setTimeout(()=>s.remove(),600);
   }
 }
 
@@ -406,7 +412,7 @@ function scheduleSpawn(){
   }, next);
 }
 function scheduleDifficulty(){
-  difficultyTimer=setInterval(function(){
+  difficultyTimer=setInterval(()=>{
     if (!running) return;
     speedMult += 0.4;
     speedEl.textContent = (speedMult*(slowFactor||1)).toFixed(1)+'×';
@@ -421,12 +427,13 @@ function scheduleDifficulty(){
 function clampX(px){ const max=(SIZE-1)*CELL(); return px<0?0:(px>max?max:px); }
 function moveEnemiesSmooth(dt){
   const dtSec=dt/1000, nowT=performance.now();
+
   // expire powerups safely
   for (let i=powerups.length-1;i>=0;i--){
     const p=powerups[i];
     if (!p || !p.el){ powerups.splice(i,1); continue; }
     if (nowT>p.expiresAt){
-      p.el.classList.add('fade'); setTimeout(function(){ if(p.el) p.el.remove(); },450);
+      p.el.classList.add('fade'); setTimeout(()=>{ if(p.el) p.el.remove(); },450);
       powerups.splice(i,1);
     }
   }
@@ -457,7 +464,7 @@ function moveEnemiesSmooth(dt){
     }
     const ex=Math.round(e.px/CELL()), ey=Math.round(e.py/CELL());
     if (ex===knight.x && ey===knight.y){
-      if (shield>0){ shield=0; bShield.classList.remove('active'); e.el.remove(); enemies.splice(i,1); game.classList.add('shake'); setTimeout(function(){ game.classList.remove('shake'); },220); SFX.shieldHit(); }
+      if (shield>0){ shield=0; bShield.classList.remove('active'); e.el.remove(); enemies.splice(i,1); game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'),220); SFX.shieldHit(); }
       else { gameOver(); return; }
     }
     if (e.py>SIZE*CELL()){ e.el.remove(); enemies.splice(i,1); }
@@ -482,7 +489,7 @@ function checkCollision(){
     if (Math.round(e.px/CELL())===knight.x && Math.round(e.py/CELL())===knight.y){
       if (shield>0){
         shield=0; bShield.classList.remove('active');
-        enemies = enemies.filter(function(en){ return !(Math.round(en.px/CELL())===knight.x && Math.round(en.px/CELL())===knight.x && Math.round(en.py/CELL())===knight.y); });
+        enemies = enemies.filter(en => !(Math.round(en.px/CELL())===knight.x && Math.round(en.py/CELL())===knight.y));
         SFX.shieldHit();
       } else { gameOver(); }
       return;
@@ -512,7 +519,7 @@ function processArrow(dir){
   if (!inside(tx,ty)){ arrowStep=0; firstArrow=null; clearGuide(); return; }
   arrowStep=0; firstArrow=null; clearGuide(); moveKnightTo(tx,ty);
 }
-document.addEventListener('keydown', function(e){
+document.addEventListener('keydown', (e)=>{
   if (!running) return;
   const k=e.key.replace('Arrow','').toLowerCase();
   const dir=DIRS[k]; if (!dir) return;
@@ -546,8 +553,8 @@ startGame();
 function gameOver(){
   if (!running) return;
   running=false; clearTimeout(spawnTimer); clearInterval(difficultyTimer);
-  for (let i=0;i<dots.length;i++) dots[i].remove(); dots=[]; clearGuide();
-  game.classList.add('shake'); setTimeout(function(){ game.classList.remove('shake'); },350);
+  dots.forEach(d=>d.remove()); dots=[]; clearGuide();
+  game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'),350);
   SFX.gameOver(); Music.stop();
   const over=document.createElement('div'); over.id='over';
   const finalScore=parseFloat(scoreEl.textContent)||0;
@@ -560,7 +567,7 @@ function gameOver(){
   const restartBtn=over.querySelector('#restart');
   const lastName=localStorage.getItem('knightRunner_lastName')||'';
   if (lastName) nameInput.value=lastName;
-  saveBtn.addEventListener('click', function(){
+  saveBtn.addEventListener('click', ()=>{
     const name=(nameInput.value||'Player').trim();
     localStorage.setItem('knightRunner_lastName', name);
     addScore(name, finalScore);
@@ -570,8 +577,8 @@ function gameOver(){
   restartBtn.addEventListener('click', restart);
 }
 function restart(){
-  for (let i=0;i<enemies.length;i++){ const e=enemies[i]; if (e.el) e.el.remove(); } enemies=[];
-  for (let i=0;i<powerups.length;i++){ const p=powerups[i]; if (p && p.el) p.el.remove(); } powerups.length=0;
+  enemies.forEach(e=>e.el && e.el.remove()); enemies=[];
+  powerups.forEach(p=>p && p.el && p.el.remove()); powerups.length=0;
   const over=document.getElementById('over'); if (over) over.remove();
   speedMult=1.0; slowFactor=1.0; slowUntil=0; shield=0; speedMoves=0;
   bShield.classList.remove('active'); bSpeed.classList.remove('active'); bSlow.classList.remove('active');
@@ -588,7 +595,7 @@ function restart(){
 //                    RESIZE SYNC / VIEWBOX
 // --------------------------------------------------------
 if (typeof ResizeObserver !== 'undefined'){
-  const ro = new ResizeObserver(function(){
+  const ro = new ResizeObserver(()=>{
     const squares=document.querySelectorAll('.square');
     for (let i=0;i<squares.length;i++){ const sq=squares[i]; const x=i%SIZE, y=(i/SIZE)|0; sq.style.left=(x*CELL())+'px'; sq.style.top=(y*CELL())+'px'; }
     placeKnight();
@@ -596,7 +603,7 @@ if (typeof ResizeObserver !== 'undefined'){
   });
   ro.observe(game);
 } else {
-  window.addEventListener('resize', function(){
+  window.addEventListener('resize', ()=>{
     const squares=document.querySelectorAll('.square');
     for (let i=0;i<squares.length;i++){ const sq=squares[i]; const x=i%SIZE, y=(i/SIZE)|0; sq.style.left=(x*CELL())+'px'; sq.style.top=(y*CELL())+'px'; }
     placeKnight();
