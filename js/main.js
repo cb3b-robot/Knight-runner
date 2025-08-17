@@ -1,8 +1,8 @@
 // =========================================================
-// Knight Runner — main.js (case-safe, no duplicate declarations)
+// Knight Runner — main.js (8x8 fit + scroll lock + reliable SFX)
 // =========================================================
 /* global ResizeObserver */
-window.__KR_BOOT__ = 'loaded';
+'use strict';
 
 // ---------- DOM refs ----------
 const root     = document.documentElement;
@@ -16,6 +16,8 @@ const toggleLB = document.getElementById('toggleLB');
 const bShield  = document.getElementById('bShield');
 const bSpeed   = document.getElementById('bSpeed');
 const bSlow    = document.getElementById('bSlow');
+const hud      = document.querySelector('.hud');
+const leaderboardEl = document.getElementById('leaderboard');
 
 // ---------- Constants ----------
 const SIZE = 8;
@@ -26,6 +28,39 @@ function CELL(){
 const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
 function inside(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
 function clamp(v,a,b){ return v<a?a : (v>b?b:v); }
+
+// --------------------------------------------------------
+//            BOARD FIT + SCROLL LOCK CONTROLLER
+// --------------------------------------------------------
+function krFitBoard(){
+  var vw = window.innerWidth  || document.documentElement.clientWidth  || 800;
+  var vh = window.innerHeight || document.documentElement.clientHeight || 600;
+
+  var hudH = hud ? Math.ceil(hud.getBoundingClientRect().height) : 0;
+  var lbH  = leaderboardEl ? Math.ceil(leaderboardEl.getBoundingClientRect().height) : 0;
+  var verticalPad = 16;
+
+  var maxByHeight = Math.max(200, vh - hudH - verticalPad - 8);
+  var maxByWidth  = Math.max(200, vw - 16);
+  var size = Math.floor(Math.min(maxByHeight, maxByWidth));
+
+  root.style.setProperty('--board', size + 'px');
+  root.style.setProperty('--cell',  (size/8) + 'px');
+
+  // Lock scroll if everything fits in view
+  var totalNeeded = hudH + size + lbH + verticalPad + 8;
+  var lock = totalNeeded <= vh;
+
+  document.body.style.overflowY = lock ? 'hidden' : '';
+  document.body.style.height    = lock ? '100dvh' : '';
+}
+window.krFitBoard = krFitBoard;
+
+window.addEventListener('resize', krFitBoard, {passive:true});
+window.addEventListener('orientationchange', function(){ setTimeout(krFitBoard, 150); }, {passive:true});
+
+// Early fit so CELL() is right before building board
+krFitBoard();
 
 // --------------------------------------------------------
 //                          AUDIO
@@ -39,22 +74,28 @@ function now(){ ensureAudio(); return audio.ctx.currentTime; }
 function unlockAudio(){
   if (audio.unlocked) return;
   ensureAudio();
+  try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch(e){}
   try {
     const s = audio.ctx.createBufferSource();
-    s.buffer = audio.ctx.createBuffer(1,1,22050);
+    s.buffer = audio.ctx.createBuffer(1, 1, 22050);
     s.connect(audio.ctx.destination);
     s.start(0);
   } catch(e){}
   audio.unlocked = true;
   Music.start();
 }
-['pointerdown','keydown'].forEach(function(evt){ document.addEventListener(evt, unlockAudio, {once:true}); });
+// Catch many gesture types (iPad-friendly)
+['pointerdown','touchstart','mousedown','keydown','click'].forEach(function(evt){
+  document.addEventListener(evt, unlockAudio, {once:true, passive:true});
+});
 
 function tone(o){
   o = o||{};
+  ensureAudio();
+  try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch(e){}
   const freq=o.freq||440, type=o.type||'sine', dur=o.dur||0.12, gain=o.gain||0.05;
   const attack=o.attack||0.01, release=o.release||0.12, slideTo=(o.slideTo==null?null:o.slideTo), slideTime=o.slideTime||0.08;
-  if (!audio.enabled) return; ensureAudio();
+  if (!audio.enabled) return;
   const t0 = now();
   const osc = audio.ctx.createOscillator();
   const g   = audio.ctx.createGain();
@@ -113,9 +154,23 @@ const Music = (function(){
   function setEnabled(on){ if(master) master.gain.value = on?0.16:0.0; }
   return { start, stop, setEnabled };
 })();
-function applyMuteUI(){ muteBtn.textContent = audio.enabled ? '🔊' : '🔇'; muteBtn.setAttribute('aria-pressed', String(!audio.enabled)); Music.setEnabled(audio.enabled); }
+function applyMuteUI(){ if(!muteBtn) return; muteBtn.textContent = audio.enabled ? '🔊' : '🔇'; muteBtn.setAttribute('aria-pressed', String(!audio.enabled)); Music.setEnabled(audio.enabled); }
 applyMuteUI();
-muteBtn.addEventListener('click', function(){ unlockAudio(); audio.enabled=!audio.enabled; try{localStorage.setItem(MUTE_KEY,String(!audio.enabled));}catch(e){} applyMuteUI(); });
+if (muteBtn){
+  muteBtn.addEventListener('click', function(){
+    unlockAudio();
+    try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch(e){}
+    audio.enabled=!audio.enabled;
+    try{ localStorage.setItem(MUTE_KEY,String(!audio.enabled)); }catch(e){}
+    applyMuteUI();
+  });
+}
+// Resume when returning to tab (Safari can suspend)
+document.addEventListener('visibilitychange', function(){
+  if (document.visibilityState === 'visible' && audio.ctx) {
+    try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch(e){}
+  }
+});
 
 // --------------------------------------------------------
 //                      LEADERBOARD (local)
@@ -144,6 +199,7 @@ function renderLeaderboard(myName,myScore){
     if(myName && myScore!=null && e.name===myName && Math.abs(e.score-myScore)<1e-6){ name.style.color='#2ecc71'; sc.style.color='#2ecc71'; }
     lbList.appendChild(li); lbList.appendChild(name); lbList.appendChild(sc);
   }
+  krFitBoard(); // re-fit after list height changes
 }
 renderLeaderboard();
 if (resetBtn){
@@ -151,7 +207,6 @@ if (resetBtn){
     if (confirm('Clear all saved scores on this device?')) {
       localStorage.removeItem(LS_KEY);
       renderLeaderboard();
-      if (window.krFitBoard) window.krFitBoard();
     }
   });
 }
@@ -160,7 +215,7 @@ if (toggleLB){
     const lb=document.getElementById('leaderboard');
     lb.classList.toggle('expanded');
     toggleLB.textContent = lb.classList.contains('expanded') ? 'Show less' : 'Show more';
-    if (window.krFitBoard) window.krFitBoard();
+    krFitBoard();
   });
 }
 
@@ -186,7 +241,7 @@ let knight = { x:3, y:6 };
 const knightEl = document.createElement('div');
 knightEl.className = 'piece knight';
 knightEl.setAttribute('data-glyph', GLYPHS.knight);
-knightEl.textContent = ''; // content provided via CSS ::before using data-glyph
+knightEl.textContent = ''; // CSS pseudo uses data-glyph
 game.appendChild(knightEl);
 function placeKnight(){ knightEl.style.left=(knight.x*CELL())+'px'; knightEl.style.top=(knight.y*CELL())+'px'; }
 placeKnight();
@@ -230,7 +285,7 @@ const knightOffsets = [
   {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
   {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
 ];
-let dots=[]; // declared ONCE
+let dots=[];
 function updateDots(){
   for (let i=0;i<dots.length;i++) dots[i].remove();
   dots=[];
@@ -482,7 +537,7 @@ function startGame(){
   requestAnimationFrame(loop);
   applyMuteUI();
   Music.setEnabled(audio.enabled);
-  if (window.krFitBoard) window.krFitBoard();
+  krFitBoard();
 }
 startGame();
 
@@ -511,7 +566,7 @@ function gameOver(){
     localStorage.setItem('knightRunner_lastName', name);
     addScore(name, finalScore);
     saveBtn.disabled=true; renderLeaderboard(name, finalScore);
-    if (window.krFitBoard) window.krFitBoard();
+    krFitBoard();
   });
   restartBtn.addEventListener('click', restart);
 }
@@ -527,16 +582,26 @@ function restart(){
   running=true; updateDots(); clearTimeout(spawnTimer); clearInterval(difficultyTimer);
   scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
   SFX.restart(); Music.start();
-  if (window.krFitBoard) window.krFitBoard();
+  krFitBoard();
 }
 
 // --------------------------------------------------------
 //                    RESIZE SYNC / VIEWBOX
 // --------------------------------------------------------
-const ro = new ResizeObserver(function(){
-  const squares=document.querySelectorAll('.square');
-  for (let i=0;i<squares.length;i++){ const sq=squares[i]; const x=i%SIZE, y=(i/SIZE)|0; sq.style.left=(x*CELL())+'px'; sq.style.top=(y*CELL())+'px'; }
-  placeKnight();
-  guide.setAttribute('viewBox', '0 0 ' + (CELL()*SIZE) + ' ' + (CELL()*SIZE));
-});
-ro.observe(game);
+if (typeof ResizeObserver !== 'undefined'){
+  const ro = new ResizeObserver(function(){
+    const squares=document.querySelectorAll('.square');
+    for (let i=0;i<squares.length;i++){ const sq=squares[i]; const x=i%SIZE, y=(i/SIZE)|0; sq.style.left=(x*CELL())+'px'; sq.style.top=(y*CELL())+'px'; }
+    placeKnight();
+    guide.setAttribute('viewBox', '0 0 ' + (CELL()*SIZE) + ' ' + (CELL()*SIZE));
+  });
+  ro.observe(game);
+} else {
+  // Fallback: recompute on window resize
+  window.addEventListener('resize', function(){
+    const squares=document.querySelectorAll('.square');
+    for (let i=0;i<squares.length;i++){ const sq=squares[i]; const x=i%SIZE, y=(i/SIZE)|0; sq.style.left=(x*CELL())+'px'; sq.style.top=(y*CELL())+'px'; }
+    placeKnight();
+    guide.setAttribute('viewBox', '0 0 ' + (CELL()*SIZE) + ' ' + (CELL()*SIZE));
+  }, {passive:true});
+}
