@@ -1,4 +1,6 @@
-/* Knight Runner — main.js (classic visuals, iPad 8×8 fit, no page scroll) */
+/* Knight Runner — main.js
+   Classic visuals + SVG checkerboard (never stripes), iPad 8×8 fit, no page scroll.
+*/
 'use strict';
 
 /* ===== DOM ===== */
@@ -16,39 +18,41 @@ const bSlow    = document.getElementById('bSlow');
 
 /* ===== Constants / helpers ===== */
 const SIZE = 8;
-const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; // classic filled glyphs
+const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; // classic glyphs
+const BOARD_COLORS = { light:'#f0d9b5', dark:'#b58863' };
+const svgNS='http://www.w3.org/2000/svg';
+
 function inside(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
 function clamp(v,a,b){ return v<a?a : (v>b?b:v); }
 function CELL(){ return parseFloat(getComputedStyle(root).getPropertyValue('--cell')) || (game.clientWidth / SIZE); }
 
 /* ------------------------------------------------------------------ */
-/*                 iPad-friendly board sizing (8×8 fit)               */
+/*                      iPad-friendly 8×8 sizing                      */
 /* ------------------------------------------------------------------ */
-function vvWidth(){  return (window.visualViewport ? window.visualViewport.width  : (window.innerWidth  || document.documentElement.clientWidth  || 800)); }
-function vvHeight(){ return (window.visualViewport ? window.visualViewport.height : (window.innerHeight || document.documentElement.clientHeight || 600)); }
+function vvWidth(){  return (window.visualViewport ? window.visualViewport.width  : (innerWidth  || document.documentElement.clientWidth  || 800)); }
+function vvHeight(){ return (window.visualViewport ? window.visualViewport.height : (innerHeight || document.documentElement.clientHeight || 600)); }
 
 function krFitBoard(){
-  const vw = Math.floor(vvWidth());
-  const vh = Math.floor(vvHeight());
-
+  const vw  = Math.floor(vvWidth());
+  const vh  = Math.floor(vvHeight());
   const hud = document.querySelector('.hud');
-  const hudH = hud ? Math.ceil(hud.getBoundingClientRect().height) : 0;
+  const hudH= hud ? Math.ceil(hud.getBoundingClientRect().height) : 0;
 
-  // pick the largest square that fits under the HUD
   const availH = Math.max(240, vh - hudH - 8);
   const availW = Math.max(240, vw - 16);
-  const size = Math.floor(Math.min(availH, availW));
+  const size   = Math.floor(Math.min(availH, availW));
 
   root.style.setProperty('--board', size + 'px');
   root.style.setProperty('--cell',  (size/8) + 'px');
 
-  // lock page scrolling so layout never shifts
+  // Lock scrolling so layout can't be nudged
   document.documentElement.style.overflow = 'hidden';
   document.body.style.overflow           = 'hidden';
   document.documentElement.style.height  = '100dvh';
   document.body.style.height             = '100dvh';
 
-  // reflow existing elements
+  // Reflow everything sized by --cell
+  layoutBG();
   layoutBoard();
   if (guide) guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
 }
@@ -60,7 +64,7 @@ if (window.visualViewport){
 }
 
 /* ------------------------------------------------------------------ */
-/*                               AUDIO                                */
+/*                                AUDIO                               */
 /* ------------------------------------------------------------------ */
 const MUTE_KEY = 'KR_mute';
 let audio = { ctx:null, enabled:true, unlocked:false };
@@ -71,8 +75,8 @@ function now(){ ensureAudio(); return audio.ctx.currentTime; }
 function unlockAudio(){
   if (audio.unlocked) return;
   ensureAudio();
-  try { if (audio.ctx.state === 'suspended' && audio.ctx.resume) audio.ctx.resume(); } catch{}
-  try { const s=audio.ctx.createBufferSource(); s.buffer=audio.ctx.createBuffer(1,1,22050); s.connect(audio.ctx.destination); s.start(0); } catch{}
+  try { if (audio.ctx.state==='suspended' && audio.ctx.resume) audio.ctx.resume(); } catch {}
+  try { const s=audio.ctx.createBufferSource(); s.buffer=audio.ctx.createBuffer(1,1,22050); s.connect(audio.ctx.destination); s.start(0); } catch {}
   audio.unlocked = true; Music.start();
 }
 ['pointerdown','touchstart','mousedown','keydown','click'].forEach(evt=>{
@@ -82,7 +86,7 @@ function unlockAudio(){
 function tone(o){
   o=o||{};
   ensureAudio();
-  try { if (audio.ctx.state==='suspended' && audio.ctx.resume) audio.ctx.resume(); } catch{}
+  try { if (audio.ctx.state==='suspended' && audio.ctx.resume) audio.ctx.resume(); } catch {}
   if (!audio.enabled) return;
   const t0=now();
   const freq=o.freq||440, type=o.type||'sine', dur=o.dur||0.12, gain=o.gain||0.05, attack=o.attack||0.01, release=o.release||0.12;
@@ -207,23 +211,72 @@ if (toggleLB){
 }
 
 /* ------------------------------------------------------------------ */
-/*                          BUILD BOARD (ABS)                         */
+/*        BULLET-PROOF BACKGROUND: SVG checkerboard (64 rects)        */
+/* ------------------------------------------------------------------ */
+let bgSvg=null, bgRects=[];
+function buildBG(){
+  if (bgSvg) { bgSvg.remove(); bgRects.length=0; }
+  const w = CELL()*SIZE, h = w;
+  bgSvg = document.createElementNS(svgNS,'svg');
+  bgSvg.setAttribute('id','bgBoard');
+  bgSvg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  bgSvg.setAttribute('preserveAspectRatio','none');
+  bgSvg.style.position='absolute';
+  bgSvg.style.inset='0';
+  bgSvg.style.width='100%';
+  bgSvg.style.height='100%';
+  bgSvg.style.zIndex='0';
+  bgSvg.style.pointerEvents='none';
+  game.prepend(bgSvg); // behind everything
+
+  const cell = CELL();
+  for (let y=0;y<SIZE;y++){
+    for (let x=0;x<SIZE;x++){
+      const r=document.createElementNS(svgNS,'rect');
+      r.setAttribute('x', x*cell);
+      r.setAttribute('y', y*cell);
+      r.setAttribute('width',  cell);
+      r.setAttribute('height', cell);
+      r.setAttribute('fill', ((x+y)%2 ? BOARD_COLORS.dark : BOARD_COLORS.light));
+      bgSvg.appendChild(r);
+      bgRects.push(r);
+    }
+  }
+}
+function layoutBG(){
+  if (!bgSvg) return;
+  const cell = CELL();
+  const w = cell*SIZE, h = w;
+  bgSvg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  for (let i=0;i<bgRects.length;i++){
+    const x = i % SIZE, y = (i / SIZE) | 0;
+    const r = bgRects[i];
+    r.setAttribute('x', x*cell);
+    r.setAttribute('y', y*cell);
+    r.setAttribute('width',  cell);
+    r.setAttribute('height', cell);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*                    FOREGROUND GRID (transparent tiles)              */
 /* ------------------------------------------------------------------ */
 function buildBoard(){
   // remove any existing squares before rebuilding
   game.querySelectorAll('.square').forEach(n => n.remove());
-
   const frag=document.createDocumentFragment();
   const cell=CELL();
   for (let y=0;y<SIZE;y++){
     for (let x=0;x<SIZE;x++){
       const sq=document.createElement('div');
       sq.className='square ' + ((x+y)%2 ? 'dark' : 'light');
+      // Force absolute & transparent (so even if CSS breaks, background shows)
       sq.style.position='absolute';
       sq.style.left   = `${x*cell}px`;
       sq.style.top    = `${y*cell}px`;
       sq.style.width  = `${cell}px`;
       sq.style.height = `${cell}px`;
+      sq.style.background='transparent';
       frag.appendChild(sq);
     }
   }
@@ -239,6 +292,8 @@ function layoutBoard(){
     sq.style.top    = `${y*cell}px`;
     sq.style.width  = `${cell}px`;
     sq.style.height = `${cell}px`;
+    // keep them transparent so SVG shows
+    sq.style.background='transparent';
   }
 }
 
@@ -255,7 +310,6 @@ function placeKnight(){ const c=CELL(); knightEl.style.left=`${knight.x*c}px`; k
 /* ------------------------------------------------------------------ */
 /*                           SVG ARROW GUIDE                          */
 /* ------------------------------------------------------------------ */
-const svgNS='http://www.w3.org/2000/svg';
 let guide = null;
 function initGuide(){
   guide=document.createElementNS(svgNS,'svg');
@@ -563,7 +617,8 @@ function loop(t){
 }
 function startGame(){
   krFitBoard();           // set sizes
-  buildBoard();           // draw 64 squares (absolute)
+  buildBG();              // SVG checkerboard behind everything
+  buildBoard();           // transparent absolute tiles (for logic)
   layoutBoard();          // first paint
   placeKnight();          // position knight
   initGuide();            // SVG arrows
@@ -634,6 +689,7 @@ function restart(){
 /* ------------------------------------------------------------------ */
 if (typeof ResizeObserver!=='undefined'){
   const ro=new ResizeObserver(()=>{
+    layoutBG();
     layoutBoard();
     placeKnight();
     updateDots();
