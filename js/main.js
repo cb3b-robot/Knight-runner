@@ -1,5 +1,7 @@
-/* Knight Runner — main.js
-   Classic visuals + SVG checkerboard (never stripes), iPad 8×8 fit, no page scroll.
+/* Knight Runner — main.js (inline board sizing, robust 8×8 on iPad, no scroll)
+   - Sets #game width/height inline so it renders even if CSS is missing/overridden
+   - Uses SVG checkerboard behind transparent squares (no stripes)
+   - Keeps classic Unicode pieces and your existing gameplay + audio
 */
 'use strict';
 
@@ -16,15 +18,27 @@ const bShield  = document.getElementById('bShield');
 const bSpeed   = document.getElementById('bSpeed');
 const bSlow    = document.getElementById('bSlow');
 
+if (!game) {
+  throw new Error('#game container is missing in index.html');
+}
+
 /* ===== Constants / helpers ===== */
 const SIZE = 8;
-const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; // classic glyphs
+const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
 const BOARD_COLORS = { light:'#f0d9b5', dark:'#b58863' };
-const svgNS='http://www.w3.org/2000/svg';
+const svgNS = 'http://www.w3.org/2000/svg';
 
 function inside(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
 function clamp(v,a,b){ return v<a?a : (v>b?b:v); }
-function CELL(){ return parseFloat(getComputedStyle(root).getPropertyValue('--cell')) || (game.clientWidth / SIZE); }
+
+/* The computed cell size. If CSS var is absent, fallback to measured size. */
+let _boardPx = 480; // last known board px (JS-tracked)
+function CELL(){
+  const css = parseFloat(getComputedStyle(root).getPropertyValue('--cell'));
+  if (!isNaN(css) && css>0) return css;
+  if (game.clientWidth>0)    return game.clientWidth / SIZE;
+  return _boardPx / SIZE; // final fallback
+}
 
 /* ------------------------------------------------------------------ */
 /*                      iPad-friendly 8×8 sizing                      */
@@ -33,19 +47,26 @@ function vvWidth(){  return (window.visualViewport ? window.visualViewport.width
 function vvHeight(){ return (window.visualViewport ? window.visualViewport.height : (innerHeight || document.documentElement.clientHeight || 600)); }
 
 function krFitBoard(){
+  // visible viewport (accounts for Safari toolbars)
   const vw  = Math.floor(vvWidth());
   const vh  = Math.floor(vvHeight());
   const hud = document.querySelector('.hud');
   const hudH= hud ? Math.ceil(hud.getBoundingClientRect().height) : 0;
 
-  const availH = Math.max(240, vh - hudH - 8);
+  // Max board that fits without scrolling
+  const availH = Math.max(240, vh - hudH - 8);   // leave tiny breathing room
   const availW = Math.max(240, vw - 16);
   const size   = Math.floor(Math.min(availH, availW));
 
-  root.style.setProperty('--board', size + 'px');
-  root.style.setProperty('--cell',  (size/8) + 'px');
+  _boardPx = size;
 
-  // Lock scrolling so layout can't be nudged
+  // Set CSS variables AND inline width/height on #game (critical!)
+  root.style.setProperty('--board', size + 'px');
+  root.style.setProperty('--cell',  (size / SIZE) + 'px');
+  game.style.width  = size + 'px';
+  game.style.height = size + 'px';
+
+  // Hard-disable page scroll so the layout cannot be nudged
   document.documentElement.style.overflow = 'hidden';
   document.body.style.overflow           = 'hidden';
   document.documentElement.style.height  = '100dvh';
@@ -59,6 +80,7 @@ function krFitBoard(){
 addEventListener('resize', krFitBoard, {passive:true});
 addEventListener('orientationchange', () => setTimeout(krFitBoard, 120), {passive:true});
 if (window.visualViewport){
+  // Safari/iPad toolbars update visualViewport; keep board locked
   window.visualViewport.addEventListener('resize', krFitBoard, {passive:true});
   window.visualViewport.addEventListener('scroll', krFitBoard, {passive:true});
 }
@@ -68,7 +90,7 @@ if (window.visualViewport){
 /* ------------------------------------------------------------------ */
 const MUTE_KEY = 'KR_mute';
 let audio = { ctx:null, enabled:true, unlocked:false };
-try{ audio.enabled = (localStorage.getItem(MUTE_KEY) !== 'true'); }catch{}
+try { audio.enabled = (localStorage.getItem(MUTE_KEY) !== 'true'); } catch {}
 
 function ensureAudio(){ if (!audio.ctx) audio.ctx = new (window.AudioContext||window.webkitAudioContext)(); }
 function now(){ ensureAudio(); return audio.ctx.currentTime; }
@@ -221,12 +243,9 @@ function buildBG(){
   bgSvg.setAttribute('id','bgBoard');
   bgSvg.setAttribute('viewBox', `0 0 ${w} ${h}`);
   bgSvg.setAttribute('preserveAspectRatio','none');
-  bgSvg.style.position='absolute';
-  bgSvg.style.inset='0';
-  bgSvg.style.width='100%';
-  bgSvg.style.height='100%';
-  bgSvg.style.zIndex='0';
-  bgSvg.style.pointerEvents='none';
+  Object.assign(bgSvg.style, {
+    position:'absolute', inset:'0', width:'100%', height:'100%', zIndex:'0', pointerEvents:'none'
+  });
   game.prepend(bgSvg); // behind everything
 
   const cell = CELL();
@@ -246,8 +265,8 @@ function buildBG(){
 function layoutBG(){
   if (!bgSvg) return;
   const cell = CELL();
-  const w = cell*SIZE, h = w;
-  bgSvg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  const w = cell*SIZE;
+  bgSvg.setAttribute('viewBox', `0 0 ${w} ${w}`);
   for (let i=0;i<bgRects.length;i++){
     const x = i % SIZE, y = (i / SIZE) | 0;
     const r = bgRects[i];
@@ -262,7 +281,7 @@ function layoutBG(){
 /*                    FOREGROUND GRID (transparent tiles)              */
 /* ------------------------------------------------------------------ */
 function buildBoard(){
-  // remove any existing squares before rebuilding
+  // remove old
   game.querySelectorAll('.square').forEach(n => n.remove());
   const frag=document.createDocumentFragment();
   const cell=CELL();
@@ -270,13 +289,15 @@ function buildBoard(){
     for (let x=0;x<SIZE;x++){
       const sq=document.createElement('div');
       sq.className='square ' + ((x+y)%2 ? 'dark' : 'light');
-      // Force absolute & transparent (so even if CSS breaks, background shows)
-      sq.style.position='absolute';
-      sq.style.left   = `${x*cell}px`;
-      sq.style.top    = `${y*cell}px`;
-      sq.style.width  = `${cell}px`;
-      sq.style.height = `${cell}px`;
-      sq.style.background='transparent';
+      // absolute + transparent so SVG background is always visible
+      Object.assign(sq.style, {
+        position:'absolute',
+        left:   `${x*cell}px`,
+        top:    `${y*cell}px`,
+        width:  `${cell}px`,
+        height: `${cell}px`,
+        background:'transparent'
+      });
       frag.appendChild(sq);
     }
   }
@@ -292,7 +313,6 @@ function layoutBoard(){
     sq.style.top    = `${y*cell}px`;
     sq.style.width  = `${cell}px`;
     sq.style.height = `${cell}px`;
-    // keep them transparent so SVG shows
     sq.style.background='transparent';
   }
 }
@@ -303,7 +323,7 @@ function layoutBoard(){
 let knight = { x:3, y:6 };
 const knightEl = document.createElement('div');
 knightEl.className = 'piece knight';
-knightEl.textContent = GLYPHS.knight; // classic Unicode piece
+knightEl.textContent = GLYPHS.knight;
 game.appendChild(knightEl);
 function placeKnight(){ const c=CELL(); knightEl.style.left=`${knight.x*c}px`; knightEl.style.top=`${knight.y*c}px`; }
 
@@ -315,7 +335,7 @@ function initGuide(){
   guide=document.createElementNS(svgNS,'svg');
   guide.setAttribute('id','guideLayer');
   guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
-  guide.style.position='absolute'; guide.style.inset='0'; guide.style.pointerEvents='none'; guide.style.zIndex='140';
+  Object.assign(guide.style, { position:'absolute', inset:'0', pointerEvents:'none', zIndex:'140' });
   game.appendChild(guide);
   const defs=document.createElementNS(svgNS,'defs');
   function mkMarker(id,color){
@@ -386,8 +406,7 @@ function updateDots(){
     const tx=knight.x+o.x, ty=knight.y+o.y;
     if (!inside(tx,ty)) continue;
     const dot=document.createElement('div'); dot.className='dot';
-    dot.style.position='absolute'; dot.style.left=`${tx*cell}px`; dot.style.top=`${ty*cell}px`;
-    dot.style.width=`${cell}px`; dot.style.height=`${cell}px`;
+    Object.assign(dot.style, { position:'absolute', left:`${tx*cell}px`, top:`${ty*cell}px`, width:`${cell}px`, height:`${cell}px` });
     const inner=document.createElement('span'); dot.appendChild(inner);
     dot.addEventListener('click', ()=> moveKnightTo(tx,ty));
     game.appendChild(dot); dots.push(dot);
@@ -410,9 +429,7 @@ function spawnPowerUp(){
     if (enemies.some(e=> Math.round(e.px/CELL())===x && Math.round(e.py/CELL())===y )) continue;
     const type=POWER_TYPES[(Math.random()*POWER_TYPES.length)|0];
     const el=document.createElement('div'); el.className='power';
-    el.style.position='absolute';
-    el.style.left=`${x*CELL()}px`; el.style.top=`${y*CELL()}px`;
-    el.style.width=`${CELL()}px`; el.style.height=`${CELL()}px`;
+    Object.assign(el.style, { position:'absolute', left:`${x*CELL()}px`, top:`${y*CELL()}px`, width:`${CELL()}px`, height:`${CELL()}px` });
     el.innerHTML=`<div class="glyph">${POWER_GLYPH[type]}</div><div class="ring"></div>`;
     game.appendChild(el);
     const expiresAt=performance.now()+5500;
@@ -560,6 +577,7 @@ function moveEnemiesSmooth(dt){
     if (e.py>SIZE*CELL()){ e.el.remove(); enemies.splice(i,1); }
   }
 
+  // subtle danger glow if enemies sit on knight squares
   let danger=false;
   for (const o of knightOffsets){
     const tx=knight.x+o.x, ty=knight.y+o.y;
@@ -616,14 +634,14 @@ function loop(t){
   requestAnimationFrame(loop);
 }
 function startGame(){
-  krFitBoard();           // set sizes
-  buildBG();              // SVG checkerboard behind everything
-  buildBoard();           // transparent absolute tiles (for logic)
-  layoutBoard();          // first paint
-  placeKnight();          // position knight
-  initGuide();            // SVG arrows
-  updateDots();           // green move dots
-  scheduleSpawn();        // enemies/powerups
+  krFitBoard();           // set sizes & inline width/height
+  buildBG();              // SVG checkerboard underlay
+  buildBoard();           // transparent absolute tiles
+  layoutBoard();
+  placeKnight();
+  initGuide();
+  updateDots();
+  scheduleSpawn();
   scheduleDifficulty();
   applyMuteUI(); Music.setEnabled(audio.enabled);
   requestAnimationFrame(loop);
