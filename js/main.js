@@ -1,4 +1,4 @@
-/* Knight Runner — main.js (classic visuals + iPad 8×8 fit, no graphic changes) */
+/* Knight Runner — main.js (classic visuals, iPad 8×8 fit, no page scroll) */
 'use strict';
 
 /* ===== DOM ===== */
@@ -16,21 +16,25 @@ const bSlow    = document.getElementById('bSlow');
 
 /* ===== Constants / helpers ===== */
 const SIZE = 8;
-const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; // keep original look
+const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; // classic filled glyphs
 function inside(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
 function clamp(v,a,b){ return v<a?a : (v>b?b:v); }
 function CELL(){ return parseFloat(getComputedStyle(root).getPropertyValue('--cell')) || (game.clientWidth / SIZE); }
 
-/* ===== iPad-friendly fit (no visual changes) ===== */
-function vvWidth(){  return (window.visualViewport ? window.visualViewport.width  : (innerWidth  || document.documentElement.clientWidth  || 800)); }
-function vvHeight(){ return (window.visualViewport ? window.visualViewport.height : (innerHeight || document.documentElement.clientHeight || 600)); }
+/* ------------------------------------------------------------------ */
+/*                 iPad-friendly board sizing (8×8 fit)               */
+/* ------------------------------------------------------------------ */
+function vvWidth(){  return (window.visualViewport ? window.visualViewport.width  : (window.innerWidth  || document.documentElement.clientWidth  || 800)); }
+function vvHeight(){ return (window.visualViewport ? window.visualViewport.height : (window.innerHeight || document.documentElement.clientHeight || 600)); }
 
 function krFitBoard(){
   const vw = Math.floor(vvWidth());
   const vh = Math.floor(vvHeight());
+
   const hud = document.querySelector('.hud');
   const hudH = hud ? Math.ceil(hud.getBoundingClientRect().height) : 0;
 
+  // pick the largest square that fits under the HUD
   const availH = Math.max(240, vh - hudH - 8);
   const availW = Math.max(240, vw - 16);
   const size = Math.floor(Math.min(availH, availW));
@@ -38,17 +42,15 @@ function krFitBoard(){
   root.style.setProperty('--board', size + 'px');
   root.style.setProperty('--cell',  (size/8) + 'px');
 
-  // lock page to avoid accidental scroll shifting layout
+  // lock page scrolling so layout never shifts
   document.documentElement.style.overflow = 'hidden';
   document.body.style.overflow           = 'hidden';
   document.documentElement.style.height  = '100dvh';
   document.body.style.height             = '100dvh';
 
-  // reflow absolute tiles & pieces
+  // reflow existing elements
   layoutBoard();
-  placeKnight();
-  updateDots();
-  guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
+  if (guide) guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
 }
 addEventListener('resize', krFitBoard, {passive:true});
 addEventListener('orientationchange', () => setTimeout(krFitBoard, 120), {passive:true});
@@ -56,11 +58,10 @@ if (window.visualViewport){
   window.visualViewport.addEventListener('resize', krFitBoard, {passive:true});
   window.visualViewport.addEventListener('scroll', krFitBoard, {passive:true});
 }
-setTimeout(krFitBoard, 0);
-setTimeout(krFitBoard, 250);
-setTimeout(krFitBoard, 800);
 
-/* ===== Audio (unchanged style, more reliable unlock) ===== */
+/* ------------------------------------------------------------------ */
+/*                               AUDIO                                */
+/* ------------------------------------------------------------------ */
 const MUTE_KEY = 'KR_mute';
 let audio = { ctx:null, enabled:true, unlocked:false };
 try{ audio.enabled = (localStorage.getItem(MUTE_KEY) !== 'true'); }catch{}
@@ -160,7 +161,9 @@ document.addEventListener('visibilitychange', ()=>{
   }
 });
 
-/* ===== Leaderboard (unchanged) ===== */
+/* ------------------------------------------------------------------ */
+/*                           LEADERBOARD                              */
+/* ------------------------------------------------------------------ */
 const LS_KEY = 'knightRunnerTopScores_v1';
 function loadScores(){ try{ const raw=localStorage.getItem(LS_KEY); const a=raw?JSON.parse(raw):[]; return Array.isArray(a)?a:[]; }catch{ return []; } }
 function saveScores(a){ try{ localStorage.setItem(LS_KEY, JSON.stringify(a)); }catch{} }
@@ -184,7 +187,6 @@ function renderLeaderboard(myName,myScore){
     if(myName && myScore!=null && e.name===myName && Math.abs(e.score-myScore)<1e-6){ name.style.color='#2ecc71'; sc.style.color='#2ecc71'; }
     lbList.appendChild(li); lbList.appendChild(name); lbList.appendChild(sc);
   });
-  krFitBoard();
 }
 renderLeaderboard();
 if (resetBtn){
@@ -204,60 +206,79 @@ if (toggleLB){
   });
 }
 
-/* ===== Build board (absolute squares; classic look) ===== */
-const squaresFrag=document.createDocumentFragment();
-for (let y=0;y<SIZE;y++){
-  for (let x=0;x<SIZE;x++){
-    const sq=document.createElement('div');
-    sq.className='square ' + ((x+y)%2 ? 'dark' : 'light');
-    sq.style.position='absolute';
-    squaresFrag.appendChild(sq);
+/* ------------------------------------------------------------------ */
+/*                          BUILD BOARD (ABS)                         */
+/* ------------------------------------------------------------------ */
+function buildBoard(){
+  // remove any existing squares before rebuilding
+  game.querySelectorAll('.square').forEach(n => n.remove());
+
+  const frag=document.createDocumentFragment();
+  const cell=CELL();
+  for (let y=0;y<SIZE;y++){
+    for (let x=0;x<SIZE;x++){
+      const sq=document.createElement('div');
+      sq.className='square ' + ((x+y)%2 ? 'dark' : 'light');
+      sq.style.position='absolute';
+      sq.style.left   = `${x*cell}px`;
+      sq.style.top    = `${y*cell}px`;
+      sq.style.width  = `${cell}px`;
+      sq.style.height = `${cell}px`;
+      frag.appendChild(sq);
+    }
   }
+  game.appendChild(frag);
 }
-game.appendChild(squaresFrag);
 function layoutBoard(){
   const squares = game.querySelectorAll('.square');
   const cell = CELL();
-  squares.forEach((sq, i) => {
-    const x = i % SIZE, y = (i / SIZE) | 0;
+  for (let i=0;i<squares.length;i++){
+    const x=i%SIZE, y=(i/SIZE)|0;
+    const sq=squares[i];
     sq.style.left   = `${x*cell}px`;
     sq.style.top    = `${y*cell}px`;
     sq.style.width  = `${cell}px`;
     sq.style.height = `${cell}px`;
-  });
+  }
 }
 
-/* ===== Knight (Unicode glyph, unchanged visuals) ===== */
+/* ------------------------------------------------------------------ */
+/*                               KNIGHT                               */
+/* ------------------------------------------------------------------ */
 let knight = { x:3, y:6 };
 const knightEl = document.createElement('div');
 knightEl.className = 'piece knight';
-knightEl.textContent = GLYPHS.knight; // render text directly (no ::before trick)
+knightEl.textContent = GLYPHS.knight; // classic Unicode piece
 game.appendChild(knightEl);
 function placeKnight(){ const c=CELL(); knightEl.style.left=`${knight.x*c}px`; knightEl.style.top=`${knight.y*c}px`; }
-placeKnight();
 
-/* ===== SVG arrow guide (unchanged) ===== */
+/* ------------------------------------------------------------------ */
+/*                           SVG ARROW GUIDE                          */
+/* ------------------------------------------------------------------ */
 const svgNS='http://www.w3.org/2000/svg';
-const guide=document.createElementNS(svgNS,'svg');
-guide.setAttribute('id','guideLayer');
-guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
-guide.style.position='absolute'; guide.style.inset='0'; guide.style.pointerEvents='none'; guide.style.zIndex='140';
-game.appendChild(guide);
-const defs=document.createElementNS(svgNS,'defs');
-function mkMarker(id,color){
-  const m=document.createElementNS(svgNS,'marker');
-  m.setAttribute('id',id); m.setAttribute('markerWidth','10'); m.setAttribute('markerHeight','10');
-  m.setAttribute('refX','6'); m.setAttribute('refY','3'); m.setAttribute('orient','auto-start-reverse');
-  const p=document.createElementNS(svgNS,'path'); p.setAttribute('d','M0,0 L6,3 L0,6 Z'); p.setAttribute('fill',color);
-  m.appendChild(p); return m;
+let guide = null;
+function initGuide(){
+  guide=document.createElementNS(svgNS,'svg');
+  guide.setAttribute('id','guideLayer');
+  guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
+  guide.style.position='absolute'; guide.style.inset='0'; guide.style.pointerEvents='none'; guide.style.zIndex='140';
+  game.appendChild(guide);
+  const defs=document.createElementNS(svgNS,'defs');
+  function mkMarker(id,color){
+    const m=document.createElementNS(svgNS,'marker');
+    m.setAttribute('id',id); m.setAttribute('markerWidth','10'); m.setAttribute('markerHeight','10');
+    m.setAttribute('refX','6'); m.setAttribute('refY','3'); m.setAttribute('orient','auto-start-reverse');
+    const p=document.createElementNS(svgNS,'path'); p.setAttribute('d','M0,0 L6,3 L0,6 Z'); p.setAttribute('fill',color);
+    m.appendChild(p); return m;
+  }
+  defs.appendChild(mkMarker('headPrimary','#2ecc71'));
+  defs.appendChild(mkMarker('headHint','#00d2ff'));
+  defs.appendChild(mkMarker('headInvalid','#e74c3c'));
+  guide.appendChild(defs);
 }
-defs.appendChild(mkMarker('headPrimary','#2ecc71'));
-defs.appendChild(mkMarker('headHint','#00d2ff'));
-defs.appendChild(mkMarker('headInvalid','#e74c3c'));
-guide.appendChild(defs);
-function clearGuide(){ while (guide.lastChild && guide.lastChild!==defs) guide.removeChild(guide.lastChild); }
+function clearGuide(){ if(!guide) return; while (guide.lastChild && guide.lastChild.nodeName!=='defs') guide.removeChild(guide.lastChild); }
 function drawFirstArrow(dir){
-  clearGuide();
+  clearGuide(); if(!guide) return;
   const cell=CELL();
   const cx=knight.x*cell+cell/2, cy=knight.y*cell+cell/2;
   const tx=knight.x+dir.x*2, ty=knight.y+dir.y*2;
@@ -295,7 +316,9 @@ function drawFirstArrow(dir){
   }
 }
 
-/* ===== Knight move dots (always visible) ===== */
+/* ------------------------------------------------------------------ */
+/*                           MOVE DOTS                                */
+/* ------------------------------------------------------------------ */
 const knightOffsets = [
   {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
   {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
@@ -317,7 +340,9 @@ function updateDots(){
   }
 }
 
-/* ===== Power-ups (unchanged visuals) ===== */
+/* ------------------------------------------------------------------ */
+/*                           POWER-UPS                                */
+/* ------------------------------------------------------------------ */
 let powerups=[];
 const POWER_TYPES=['shield','speed','slow','clear'];
 const POWER_GLYPH={ shield:'🛡', speed:'⚡', slow:'🕒', clear:'💥' };
@@ -370,7 +395,9 @@ function sparkle(x,y){
   }
 }
 
-/* ===== Enemies (unchanged visuals) ===== */
+/* ------------------------------------------------------------------ */
+/*                            ENEMIES                                 */
+/* ------------------------------------------------------------------ */
 let enemies=[];
 const BASE_SPEED={ pawn:1.15, bishop:2.30, rook:3.20, queen:1.40 }; // cells/sec
 
@@ -408,7 +435,9 @@ function pickNextBishopTarget(e){
   e.btx=nx; e.bty=ny;
 }
 
-/* ===== Difficulty / Spawns ===== */
+/* ------------------------------------------------------------------ */
+/*                        DIFFICULTY / SPAWNS                         */
+/* ------------------------------------------------------------------ */
 let running=true, startTime=performance.now(), lastTime=startTime, speedMult=1.0;
 let spawnTimer=null, difficultyTimer=null;
 const baseSpawnDelay=1500;
@@ -431,7 +460,9 @@ function scheduleDifficulty(){
   }, 6000);
 }
 
-/* ===== Movement & Collisions ===== */
+/* ------------------------------------------------------------------ */
+/*                    MOVEMENT / COLLISIONS                           */
+/* ------------------------------------------------------------------ */
 function clampX(px){ const max=(SIZE-1)*CELL(); return px<0?0:(px>max?max:px); }
 function moveEnemiesSmooth(dt){
   const dtSec=dt/1000, nowT=performance.now();
@@ -493,7 +524,9 @@ function checkCollision(){
   }
 }
 
-/* ===== Knight movement (unchanged rules) ===== */
+/* ------------------------------------------------------------------ */
+/*                         KNIGHT MOVEMENT                            */
+/* ------------------------------------------------------------------ */
 function moveKnightTo(tx,ty){
   if (!inside(tx,ty)) return;
   knight.x=tx; knight.y=ty; placeKnight();
@@ -518,7 +551,9 @@ document.addEventListener('keydown', (e)=>{
   arrowStep=0; firstArrow=null; clearGuide(); moveKnightTo(tx,ty);
 }, {passive:false});
 
-/* ===== Loop / Start / Restart ===== */
+/* ------------------------------------------------------------------ */
+/*                             LOOP / START                           */
+/* ------------------------------------------------------------------ */
 function loop(t){
   if (!running) return;
   const dt=t-lastTime; lastTime=t;
@@ -527,11 +562,22 @@ function loop(t){
   requestAnimationFrame(loop);
 }
 function startGame(){
-  updateDots(); scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
-  applyMuteUI(); Music.setEnabled(audio.enabled); krFitBoard();
+  krFitBoard();           // set sizes
+  buildBoard();           // draw 64 squares (absolute)
+  layoutBoard();          // first paint
+  placeKnight();          // position knight
+  initGuide();            // SVG arrows
+  updateDots();           // green move dots
+  scheduleSpawn();        // enemies/powerups
+  scheduleDifficulty();
+  applyMuteUI(); Music.setEnabled(audio.enabled);
+  requestAnimationFrame(loop);
 }
 startGame();
 
+/* ------------------------------------------------------------------ */
+/*                         GAME OVER / RESTART                        */
+/* ------------------------------------------------------------------ */
 function gameOver(){
   if (!running) return;
   running=false; clearTimeout(spawnTimer); clearInterval(difficultyTimer);
@@ -583,13 +629,15 @@ function restart(){
   SFX.restart(); Music.start(); krFitBoard();
 }
 
-/* ===== Resize observer to keep absolute layout perfect ===== */
+/* ------------------------------------------------------------------ */
+/*                         RESIZE OBSERVER                            */
+/* ------------------------------------------------------------------ */
 if (typeof ResizeObserver!=='undefined'){
   const ro=new ResizeObserver(()=>{
     layoutBoard();
     placeKnight();
     updateDots();
-    guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
+    if (guide) guide.setAttribute('viewBox', `0 0 ${CELL()*SIZE} ${CELL()*SIZE}`);
   });
   ro.observe(game);
 }
