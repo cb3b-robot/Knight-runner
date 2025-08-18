@@ -1,4 +1,4 @@
-/* Knight Runner — main.js (legacy visuals + iPad 8×8 fit) */
+/* Knight Runner — main.js (classic visuals + iPad 8×8 fit, no graphic changes) */
 'use strict';
 
 /* ===== DOM ===== */
@@ -14,27 +14,23 @@ const bShield  = document.getElementById('bShield');
 const bSpeed   = document.getElementById('bSpeed');
 const bSlow    = document.getElementById('bSlow');
 
-/* ===== Constants ===== */
+/* ===== Constants / helpers ===== */
 const SIZE = 8;
-const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; // keep visuals as before
+const GLYPHS = { knight:'♞', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' }; // keep original look
 function inside(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
 function clamp(v,a,b){ return v<a?a : (v>b?b:v); }
 function CELL(){ return parseFloat(getComputedStyle(root).getPropertyValue('--cell')) || (game.clientWidth / SIZE); }
 
-/* ------------------------------------------------------------------ */
-/*                 iPad-friendly board sizing (8×8 fit)               */
-/* ------------------------------------------------------------------ */
-function vvWidth(){  return (window.visualViewport ? window.visualViewport.width  : (window.innerWidth  || document.documentElement.clientWidth  || 800)); }
-function vvHeight(){ return (window.visualViewport ? window.visualViewport.height : (window.innerHeight || document.documentElement.clientHeight || 600)); }
+/* ===== iPad-friendly fit (no visual changes) ===== */
+function vvWidth(){  return (window.visualViewport ? window.visualViewport.width  : (innerWidth  || document.documentElement.clientWidth  || 800)); }
+function vvHeight(){ return (window.visualViewport ? window.visualViewport.height : (innerHeight || document.documentElement.clientHeight || 600)); }
 
 function krFitBoard(){
   const vw = Math.floor(vvWidth());
   const vh = Math.floor(vvHeight());
-
   const hud = document.querySelector('.hud');
   const hudH = hud ? Math.ceil(hud.getBoundingClientRect().height) : 0;
 
-  // Leave a tiny margin; choose the largest square that fits (no scroll)
   const availH = Math.max(240, vh - hudH - 8);
   const availW = Math.max(240, vw - 16);
   const size = Math.floor(Math.min(availH, availW));
@@ -42,13 +38,13 @@ function krFitBoard(){
   root.style.setProperty('--board', size + 'px');
   root.style.setProperty('--cell',  (size/8) + 'px');
 
-  // Hard block page scroll (keeps the board stable)
+  // lock page to avoid accidental scroll shifting layout
   document.documentElement.style.overflow = 'hidden';
   document.body.style.overflow           = 'hidden';
   document.documentElement.style.height  = '100dvh';
   document.body.style.height             = '100dvh';
 
-  // Reposition absolute elements to the new cell size
+  // reflow absolute tiles & pieces
   layoutBoard();
   placeKnight();
   updateDots();
@@ -64,9 +60,7 @@ setTimeout(krFitBoard, 0);
 setTimeout(krFitBoard, 250);
 setTimeout(krFitBoard, 800);
 
-/* ------------------------------------------------------------------ */
-/*                               AUDIO                                */
-/* ------------------------------------------------------------------ */
+/* ===== Audio (unchanged style, more reliable unlock) ===== */
 const MUTE_KEY = 'KR_mute';
 let audio = { ctx:null, enabled:true, unlocked:false };
 try{ audio.enabled = (localStorage.getItem(MUTE_KEY) !== 'true'); }catch{}
@@ -166,9 +160,7 @@ document.addEventListener('visibilitychange', ()=>{
   }
 });
 
-/* ------------------------------------------------------------------ */
-/*                           LEADERBOARD                              */
-/* ------------------------------------------------------------------ */
+/* ===== Leaderboard (unchanged) ===== */
 const LS_KEY = 'knightRunnerTopScores_v1';
 function loadScores(){ try{ const raw=localStorage.getItem(LS_KEY); const a=raw?JSON.parse(raw):[]; return Array.isArray(a)?a:[]; }catch{ return []; } }
 function saveScores(a){ try{ localStorage.setItem(LS_KEY, JSON.stringify(a)); }catch{} }
@@ -192,7 +184,7 @@ function renderLeaderboard(myName,myScore){
     if(myName && myScore!=null && e.name===myName && Math.abs(e.score-myScore)<1e-6){ name.style.color='#2ecc71'; sc.style.color='#2ecc71'; }
     lbList.appendChild(li); lbList.appendChild(name); lbList.appendChild(sc);
   });
-  krFitBoard(); // list height can change fitting
+  krFitBoard();
 }
 renderLeaderboard();
 if (resetBtn){
@@ -212,51 +204,39 @@ if (toggleLB){
   });
 }
 
-/* ------------------------------------------------------------------ */
-/*                          BUILD BOARD (ABS)                         */
-/* ------------------------------------------------------------------ */
+/* ===== Build board (absolute squares; classic look) ===== */
 const squaresFrag=document.createDocumentFragment();
 for (let y=0;y<SIZE;y++){
   for (let x=0;x<SIZE;x++){
     const sq=document.createElement('div');
     sq.className='square ' + ((x+y)%2 ? 'dark' : 'light');
     sq.style.position='absolute';
-    sq.style.left = `${x*CELL()}px`;
-    sq.style.top  = `${y*CELL()}px`;
-    sq.style.width  = `var(--cell)`;
-    sq.style.height = `var(--cell)`;
     squaresFrag.appendChild(sq);
   }
 }
 game.appendChild(squaresFrag);
-
-// Reposition absolute tiles when size changes
 function layoutBoard(){
   const squares = game.querySelectorAll('.square');
   const cell = CELL();
   squares.forEach((sq, i) => {
     const x = i % SIZE, y = (i / SIZE) | 0;
-    sq.style.left = `${x*cell}px`;
-    sq.style.top  = `${y*cell}px`;
+    sq.style.left   = `${x*cell}px`;
+    sq.style.top    = `${y*cell}px`;
     sq.style.width  = `${cell}px`;
     sq.style.height = `${cell}px`;
   });
 }
 
-/* ------------------------------------------------------------------ */
-/*                               KNIGHT                               */
-/* ------------------------------------------------------------------ */
+/* ===== Knight (Unicode glyph, unchanged visuals) ===== */
 let knight = { x:3, y:6 };
 const knightEl = document.createElement('div');
 knightEl.className = 'piece knight';
-knightEl.textContent = GLYPHS.knight; // Unicode, as before
+knightEl.textContent = GLYPHS.knight; // render text directly (no ::before trick)
 game.appendChild(knightEl);
 function placeKnight(){ const c=CELL(); knightEl.style.left=`${knight.x*c}px`; knightEl.style.top=`${knight.y*c}px`; }
 placeKnight();
 
-/* ------------------------------------------------------------------ */
-/*                           SVG ARROW GUIDE                          */
-/* ------------------------------------------------------------------ */
+/* ===== SVG arrow guide (unchanged) ===== */
 const svgNS='http://www.w3.org/2000/svg';
 const guide=document.createElementNS(svgNS,'svg');
 guide.setAttribute('id','guideLayer');
@@ -275,7 +255,6 @@ defs.appendChild(mkMarker('headPrimary','#2ecc71'));
 defs.appendChild(mkMarker('headHint','#00d2ff'));
 defs.appendChild(mkMarker('headInvalid','#e74c3c'));
 guide.appendChild(defs);
-
 function clearGuide(){ while (guide.lastChild && guide.lastChild!==defs) guide.removeChild(guide.lastChild); }
 function drawFirstArrow(dir){
   clearGuide();
@@ -316,9 +295,7 @@ function drawFirstArrow(dir){
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*                           MOVE DOTS                                */
-/* ------------------------------------------------------------------ */
+/* ===== Knight move dots (always visible) ===== */
 const knightOffsets = [
   {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
   {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
@@ -340,9 +317,7 @@ function updateDots(){
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*                           POWER-UPS                                */
-/* ------------------------------------------------------------------ */
+/* ===== Power-ups (unchanged visuals) ===== */
 let powerups=[];
 const POWER_TYPES=['shield','speed','slow','clear'];
 const POWER_GLYPH={ shield:'🛡', speed:'⚡', slow:'🕒', clear:'💥' };
@@ -395,9 +370,7 @@ function sparkle(x,y){
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*                            ENEMIES                                 */
-/* ------------------------------------------------------------------ */
+/* ===== Enemies (unchanged visuals) ===== */
 let enemies=[];
 const BASE_SPEED={ pawn:1.15, bishop:2.30, rook:3.20, queen:1.40 }; // cells/sec
 
@@ -435,9 +408,7 @@ function pickNextBishopTarget(e){
   e.btx=nx; e.bty=ny;
 }
 
-/* ------------------------------------------------------------------ */
-/*                        DIFFICULTY / SPAWNS                         */
-/* ------------------------------------------------------------------ */
+/* ===== Difficulty / Spawns ===== */
 let running=true, startTime=performance.now(), lastTime=startTime, speedMult=1.0;
 let spawnTimer=null, difficultyTimer=null;
 const baseSpawnDelay=1500;
@@ -460,9 +431,7 @@ function scheduleDifficulty(){
   }, 6000);
 }
 
-/* ------------------------------------------------------------------ */
-/*                    MOVEMENT / COLLISIONS                           */
-/* ------------------------------------------------------------------ */
+/* ===== Movement & Collisions ===== */
 function clampX(px){ const max=(SIZE-1)*CELL(); return px<0?0:(px>max?max:px); }
 function moveEnemiesSmooth(dt){
   const dtSec=dt/1000, nowT=performance.now();
@@ -507,10 +476,7 @@ function moveEnemiesSmooth(dt){
   }
 
   let danger=false;
-  for (const o of [
-    {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
-    {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
-  ]){
+  for (const o of knightOffsets){
     const tx=knight.x+o.x, ty=knight.y+o.y;
     if (!inside(tx,ty)) continue;
     if (enemies.some(e=>Math.round(e.px/CELL())===tx && Math.round(e.py/CELL())===ty)){ danger=true; break; }
@@ -527,9 +493,7 @@ function checkCollision(){
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*                         KNIGHT MOVEMENT                            */
-/* ------------------------------------------------------------------ */
+/* ===== Knight movement (unchanged rules) ===== */
 function moveKnightTo(tx,ty){
   if (!inside(tx,ty)) return;
   knight.x=tx; knight.y=ty; placeKnight();
@@ -554,9 +518,7 @@ document.addEventListener('keydown', (e)=>{
   arrowStep=0; firstArrow=null; clearGuide(); moveKnightTo(tx,ty);
 }, {passive:false});
 
-/* ------------------------------------------------------------------ */
-/*                             LOOP / START                           */
-/* ------------------------------------------------------------------ */
+/* ===== Loop / Start / Restart ===== */
 function loop(t){
   if (!running) return;
   const dt=t-lastTime; lastTime=t;
@@ -570,9 +532,6 @@ function startGame(){
 }
 startGame();
 
-/* ------------------------------------------------------------------ */
-/*                         GAME OVER / RESTART                        */
-/* ------------------------------------------------------------------ */
 function gameOver(){
   if (!running) return;
   running=false; clearTimeout(spawnTimer); clearInterval(difficultyTimer);
@@ -624,9 +583,7 @@ function restart(){
   SFX.restart(); Music.start(); krFitBoard();
 }
 
-/* ------------------------------------------------------------------ */
-/*                         RESIZE OBSERVER                            */
-/* ------------------------------------------------------------------ */
+/* ===== Resize observer to keep absolute layout perfect ===== */
 if (typeof ResizeObserver!=='undefined'){
   const ro=new ResizeObserver(()=>{
     layoutBoard();
