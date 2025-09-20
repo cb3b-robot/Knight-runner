@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Knight Runner — KR-2025-08-15-g</title>
+<title>Knight Runner — KR-2025-09-20</title>
 <style>
 :root{ --board:600px; --cell: calc(var(--board) / 8); }
 *{box-sizing:border-box;}
@@ -22,6 +22,7 @@ h1{margin:6px 0 0;font-size:clamp(18px,3.8vw,28px);}
 .badge{padding:4px 8px;border-radius:999px;border:1px solid #444;background:#1c1c1c;font-size:12px;opacity:.9}
 .badge.active{border-color:#2ecc71;box-shadow:0 0 0 2px #2ecc7133 inset}
 #muteBtn{padding:6px 10px;border-radius:999px;border:1px solid #444;background:#1c1c1c;color:#fff;cursor:pointer}
+#pauseBtn{padding:6px 10px;border-radius:999px;border:1px solid #444;background:#1c1c1c;color:#fff;cursor:pointer}
 button,input{font-size:16px}
 
 /* Game frame */
@@ -30,6 +31,7 @@ button,input{font-size:16px}
   border:4px solid #fff;border-radius:12px;overflow:hidden;
   box-shadow:0 12px 40px #0008,inset 0 0 0 1px #0006;
   transition:transform .12s ease;
+  touch-action:manipulation;
 }
 #game.shake{animation:shake .35s ease;}
 @keyframes shake{0%,100%{transform:translate3d(0,0,0)}20%{transform:translate3d(-6px,0,0)}40%{transform:translate3d(6px,0,0)}60%{transform:translate3d(-4px,0,0)}80%{transform:translate3d(4px,0,0)}}
@@ -72,9 +74,9 @@ button,input{font-size:16px}
 .ga-invalid{ stroke:#e74c3c; opacity:.6; }
 .ga-label{font:600 14px/1 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; fill:#fff; paint-order:stroke; stroke:#000; stroke-width:3px;}
 
-/* Game over overlay */
-#over{position:absolute;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;flex-direction:column;z-index:200;text-align:center;padding:20px;}
-#over h2{margin:0 0 8px;font-size:clamp(20px,5vw,36px);}
+/* Game over / paused overlays */
+#over,#paused{position:absolute;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;flex-direction:column;z-index:200;text-align:center;padding:20px;}
+#over h2,#paused h2{margin:0 0 8px;font-size:clamp(20px,5vw,36px);}
 #over p{margin:0 0 12px;opacity:.9;}
 #restart{padding:10px 14px;border-radius:10px;border:1px solid #fff4;background:#fff;color:#111;cursor:pointer;font-weight:700;}
 #saveRow{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px;}
@@ -110,6 +112,21 @@ button,input{font-size:16px}
 #errorOverlay{position:fixed;inset:0;background:#1b1b1bcc;color:#fff;z-index:9999;display:none;align-items:flex-start;justify-content:center;padding:16px;overflow:auto}
 #errorOverlay pre{max-width:900px;width:100%;background:#2a2a2a;border:1px solid #ff6b6b;border-radius:10px;padding:12px;white-space:pre-wrap;word-break:break-word}
 
+/* D-Pad */
+#dpad{
+  --sz:64px;
+  display:grid;grid-template-columns:var(--sz) var(--sz) var(--sz);
+  grid-template-rows:var(--sz) var(--sz) var(--sz);
+  gap:6px;justify-items:center;align-items:center;
+  padding:6px;border-radius:12px;background:#1c1c1c;border:1px solid #2a2a2a;
+}
+.dbtn{
+  width:var(--sz);height:var(--sz);display:flex;align-items:center;justify-content:center;
+  border-radius:12px;border:1px solid #444;background:#222;color:#fff;font-weight:900;font-size:22px;cursor:pointer;
+  user-select:none; -webkit-tap-highlight-color:transparent;
+}
+.dbtn:active{transform:translateY(1px);}
+
 /* Compact leaderboard on short screens */
 @media (max-height: 740px) {
   #leaderboard { max-height: 12dvh; }
@@ -127,8 +144,16 @@ button,input{font-size:16px}
     <div class="badge" id="bSpeed">⚡ speed</div>
     <div class="badge" id="bSlow">🕒 slow</div>
     <button id="muteBtn" aria-pressed="false" title="Mute/Unmute">🔊</button>
+    <button id="pauseBtn" aria-pressed="false" title="Pause/Resume">⏸️</button>
+  </div>
+  <!-- D-Pad -->
+  <div id="dpad" aria-label="Knight move D-Pad">
+    <div></div>                     <button class="dbtn" data-dir="up">▲</button>    <div></div>
+    <button class="dbtn" data-dir="left">◀</button> <button class="dbtn" data-dir="cancel">⟲</button> <button class="dbtn" data-dir="right">▶</button>
+    <div></div>                     <button class="dbtn" data-dir="down">▼</button>  <div></div>
   </div>
 </div>
+
 <div id="game"></div>
 
 <!-- Local Leaderboard -->
@@ -143,18 +168,20 @@ button,input{font-size:16px}
   <ol id="lbList"></ol>
 </div>
 
-<!-- Error overlay (shows any JS errors on-screen) -->
+<!-- Overlays -->
 <div id="errorOverlay"><pre id="errorText"></pre></div>
+
 <script>
+/* ===== Error overlay ===== */
 (function(){
   const overlay = document.getElementById('errorOverlay');
   const text = document.getElementById('errorText');
   function show(msg){
     overlay.style.display='flex';
-    text.textContent = 'JavaScript error:\n\n' + msg + '\n\n(Hard refresh after fixing)';
+    text.textContent = 'JavaScript error:\\n\\n' + msg + '\\n\\n(Hard refresh after fixing)';
   }
   window.addEventListener('error', (e)=>{
-    const where = (e.filename ? ('\n' + e.filename) : '') + (e.lineno? (':' + e.lineno) : '');
+    const where = (e.filename ? ('\\n' + e.filename) : '') + (e.lineno? (':' + e.lineno) : '');
     show((e.message||'Unknown error') + where);
   });
   window.addEventListener('unhandledrejection', (e)=>{
@@ -170,37 +197,31 @@ button,input{font-size:16px}
   const game = document.getElementById('game');
   const hud  = document.querySelector('.hud');
 
-  // Board size that always fits iPad/iPhone screens
   function getHeight(){ 
-    var vv = window.visualViewport;
-    if (vv && typeof vv.height === 'number') return vv.height;
-    return window.innerHeight || document.documentElement.clientHeight || 600;
+    const vv = window.visualViewport;
+    return (vv && typeof vv.height === 'number') ? vv.height
+      : (window.innerHeight || document.documentElement.clientHeight || 600);
   }
   function getWidth(){
-    var vv = window.visualViewport;
-    if (vv && typeof vv.width === 'number') return vv.width;
-    return window.innerWidth || document.documentElement.clientWidth || 600;
+    const vv = window.visualViewport;
+    return (vv && typeof vv.width === 'number') ? vv.width
+      : (window.innerWidth || document.documentElement.clientWidth || 600);
   }
-  function rectHeight(el){
-    if (!el) return 0;
-    var r = el.getBoundingClientRect();
-    return (r && r.height) ? r.height : 0;
-  }
+  function rectHeight(el){ if (!el) return 0; const r = el.getBoundingClientRect(); return (r && r.height) ? r.height : 0; }
   function setBoardSize(){
-    var vh = getHeight();
-    var vw = getWidth();
-    var titleH = rectHeight(document.querySelector('h1'));
-    var hudH   = rectHeight(hud);
-    var lbH    = rectHeight(document.getElementById('leaderboard'));
-    var gaps = 20; // padding + safe areas buffer
-
-    var maxByHeight = Math.max(240, vh - titleH - hudH - lbH - gaps);
-    var maxByWidth  = Math.max(240, vw - 16);
-    var size = Math.floor(Math.min(maxByHeight, maxByWidth));
+    const vh = getHeight();
+    const vw = getWidth();
+    const titleH = rectHeight(document.querySelector('h1'));
+    const hudH   = rectHeight(hud);
+    const lbH    = rectHeight(document.getElementById('leaderboard'));
+    const gaps = 20; // padding + safe areas buffer
+    const maxByHeight = Math.max(240, vh - titleH - hudH - lbH - gaps);
+    const maxByWidth  = Math.max(240, vw - 16);
+    const size = Math.floor(Math.min(maxByHeight, maxByWidth));
     root.style.setProperty('--board', size + 'px');
   }
   window.addEventListener('resize', setBoardSize, {passive:true});
-  window.addEventListener('orientationchange', function(){ setTimeout(setBoardSize, 120); }, {passive:true});
+  window.addEventListener('orientationchange', () => setTimeout(setBoardSize, 120), {passive:true});
   if (window.visualViewport){
     visualViewport.addEventListener('resize', setBoardSize, {passive:true});
     visualViewport.addEventListener('scroll', setBoardSize, {passive:true});
@@ -212,17 +233,17 @@ button,input{font-size:16px}
   const speedEl = document.getElementById('speed');
   const lbList  = document.getElementById('lbList');
   const muteBtn = document.getElementById('muteBtn');
+  const pauseBtn= document.getElementById('pauseBtn');
   const bShield = document.getElementById('bShield');
   const bSpeed  = document.getElementById('bSpeed');
   const bSlow   = document.getElementById('bSlow');
 
   /* ===== Constants ===== */
   const SIZE = 8;
-  // Use actual board width so CELL() is a real number (fixes "1 of 64 squares")
   const CELL = () => game.getBoundingClientRect().width / SIZE;
   const GLYPHS = { knight:'♘', pawn:'♟', rook:'♜', bishop:'♝', queen:'♛' };
 
-  /* ===== Audio (SFX + Music) ===== */
+  /* ===== Audio ===== */
   const MUTE_KEY = 'KR_mute';
   let audio = { ctx:null, enabled:true, unlocked:false };
   try{ audio.enabled = localStorage.getItem(MUTE_KEY)!=='true' ? true : false; }catch(e){}
@@ -238,7 +259,6 @@ button,input{font-size:16px}
   }
   function now(){ ensureAudio(); return audio.ctx.currentTime; }
 
-  // Compat-friendly options pattern (no destructuring defaults)
   function tone(opts){
     opts = opts || {};
     const freq = (opts.freq==null)?440:opts.freq;
@@ -267,20 +287,19 @@ button,input{font-size:16px}
   }
 
   const SFX = {
-    jump:function(){ tone({freq:600,type:'square',gain:0.04,attack:0.003,release:0.08, slideTo:760, slideTime:0.06}); },
-    pickupShield:function(){ tone({freq:520,type:'triangle',gain:0.05,attack:0.004,release:0.12}); tone({freq:780,type:'triangle',gain:0.04,attack:0.004,release:0.12, slideTo:880, slideTime:0.08}); },
-    pickupSpeed:function(){ tone({freq:750,type:'square',gain:0.05,attack:0.003,release:0.09}); },
-    pickupSlow:function(){ tone({freq:420,type:'sine',gain:0.05,attack:0.003,release:0.18, slideTo:320, slideTime:0.14}); },
-    pickupClear:function(){ tone({freq:300,type:'sawtooth',gain:0.06,attack:0.004,release:0.18, slideTo:120, slideTime:0.2}); },
-    spawnPower:function(){ tone({freq:880,type:'triangle',gain:0.035,attack:0.002,release:0.06}); },
-    shieldHit:function(){ tone({freq:180,type:'square',gain:0.07,attack:0.002,release:0.2}); },
-    gameOver:function(){ tone({freq:440,type:'sawtooth',gain:0.06,attack:0.004,release:0.25, slideTo:180, slideTime:0.25}); },
-    restart:function(){ tone({freq:660,type:'triangle',gain:0.05,attack:0.003,release:0.12, slideTo:880, slideTime:0.08}); }
+    jump(){ tone({freq:600,type:'square',gain:0.04,attack:0.003,release:0.08, slideTo:760, slideTime:0.06}); },
+    pickupShield(){ tone({freq:520,type:'triangle',gain:0.05,attack:0.004,release:0.12}); tone({freq:780,type:'triangle',gain:0.04,attack:0.004,release:0.12, slideTo:880, slideTime:0.08}); },
+    pickupSpeed(){ tone({freq:750,type:'square',gain:0.05,attack:0.003,release:0.09}); },
+    pickupSlow(){ tone({freq:420,type:'sine',gain:0.05,attack:0.003,release:0.18, slideTo:320, slideTime:0.14}); },
+    pickupClear(){ tone({freq:300,type:'sawtooth',gain:0.06,attack:0.004,release:0.18, slideTo:120, slideTime:0.2}); },
+    spawnPower(){ tone({freq:880,type:'triangle',gain:0.035,attack:0.002,release:0.06}); },
+    shieldHit(){ tone({freq:180,type:'square',gain:0.07,attack:0.002,release:0.2}); },
+    gameOver(){ tone({freq:440,type:'sawtooth',gain:0.06,attack:0.004,release:0.25, slideTo:180, slideTime:0.25}); },
+    restart(){ tone({freq:660,type:'triangle',gain:0.05,attack:0.003,release:0.12, slideTo:880, slideTime:0.08}); }
   };
 
   const Music = (function(){
     let master, padGain, arpGain, delay, feedback, lowpass, timer=null, step=0, playing=false;
-
     function init(){
       ensureAudio(); if (master) return;
       master = audio.ctx.createGain(); padGain = audio.ctx.createGain(); arpGain = audio.ctx.createGain();
@@ -293,18 +312,14 @@ button,input{font-size:16px}
       lowpass.connect(delay); delay.connect(feedback); feedback.connect(delay);
       delay.connect(master); lowpass.connect(master); master.connect(audio.ctx.destination);
     }
-
     function mtof(n){ return 440*Math.pow(2,(n-69)/12); }
-
     function playNote(opts){
       opts = opts || {};
-      const freq = opts.freq;
-      const when = opts.when;
+      const freq = opts.freq, when = opts.when;
       const dur = (opts.dur==null)?0.22:opts.dur;
       const type = opts.type || 'triangle';
       const gain = (opts.gain==null)?0.25:opts.gain;
       const target = opts.target || arpGain;
-
       if (!audio.enabled) return;
       const osc=audio.ctx.createOscillator(), g=audio.ctx.createGain();
       osc.type=type; osc.frequency.value=freq;
@@ -313,14 +328,11 @@ button,input{font-size:16px}
       g.gain.exponentialRampToValueAtTime(0.0001,when+dur);
       osc.connect(g); g.connect(target); osc.start(when); osc.stop(when+dur+0.02);
     }
-
     function playPad(opts){
       opts = opts || {};
-      const freq = opts.freq;
-      const when = opts.when;
+      const freq = opts.freq, when = opts.when;
       const dur = (opts.dur==null)?3.8:opts.dur;
       const gain = (opts.gain==null)?0.10:opts.gain;
-
       if (!audio.enabled) return;
       const o1=audio.ctx.createOscillator(), o2=audio.ctx.createOscillator(), g=audio.ctx.createGain();
       o1.type='sine'; o2.type='sine';
@@ -329,11 +341,9 @@ button,input{font-size:16px}
       o1.connect(g); o2.connect(g); g.connect(padGain);
       o1.start(when); o2.start(when); o1.stop(when+dur+0.1); o2.stop(when+dur+0.1);
     }
-
     const roots=[57,53,60,55];
     const arpPattern=[0,7,12,7,0,7,12,14];
     const stepDur=0.5;
-
     function tick(){
       if (!playing || !audio.enabled) return;
       const t=now();
@@ -347,7 +357,7 @@ button,input{font-size:16px}
       playNote({freq:mtof(root+intv),when:t+0.02,dur:0.24,type:'triangle',gain:0.18});
       step++;
     }
-    function start(){ init(); if (playing) return; playing=true; tick(); timer=setInterval(function(){ tick(); }, stepDur*1000); }
+    function start(){ init(); if (playing) return; playing=true; tick(); timer=setInterval(()=>tick(), stepDur*1000); }
     function stop(){ if (!playing) return; playing=false; if (timer){clearInterval(timer); timer=null;} }
     function setEnabled(on){ if (master) master.gain.value = on?0.18:0.0; }
     return { start, stop, setEnabled };
@@ -377,7 +387,7 @@ button,input{font-size:16px}
     list.sort(function(a,b){ return (b.score - a.score) || (a.ts - b.ts); });
     const top10 = list.slice(0,10); saveScores(top10); return top10;
   }
-  function renderLeaderboard(myName,nullScore){
+  function renderLeaderboard(){
     lbList.innerHTML='';
     const list = loadScores();
     if(list.length===0){
@@ -385,7 +395,7 @@ button,input{font-size:16px}
       const b=document.createElement('div'); b.className='score'; b.textContent='—';
       lbList.appendChild(li); lbList.appendChild(a); lbList.appendChild(b); return;
     }
-    for (var i=0;i<list.length;i++){
+    for (let i=0;i<list.length;i++){
       const e=list[i];
       const li=document.createElement('li');
       const name=document.createElement('div'); name.className='name'; name.textContent=(i+1)+'. '+e.name;
@@ -403,17 +413,20 @@ button,input{font-size:16px}
 
   /* ===== Game state ===== */
   let running = true;
+  let paused  = false;
   let speedMult = 1.0;
   let slowFactor = 1.0;
-  let enemies = [];   // declared ONCE
-  let powerups = [];  // declared ONCE
+  let enemies = [];
+  let powerups = [];
   let shield = 0;
   let speedMoves = 0;
   let slowUntil = 0;
 
-  let spawnTimer, difficultyTimer;
+  let spawnTimer=null, difficultyTimer=null;
   let startTime = performance.now();
   let lastTime  = startTime;
+  let pausedAt  = 0;
+  let accTimeOffset = 0;
 
   /* ===== Build board ===== */
   for (let y=0;y<SIZE;y++){
@@ -476,7 +489,7 @@ button,input{font-size:16px}
     label.setAttribute('class','ga-label');
     label.textContent = inside ? 'then choose ⟂' : 'out of bounds';
     guide.appendChild(label);
-    if (!inside){ game.classList.add('shake'); setTimeout(function(){game.classList.remove('shake');}, 220); return; }
+    if (!inside){ game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'), 220); return; }
     const hints=[];
     if (dir.x!==0){ hints.push({hx:tx,hy:ty+1}); hints.push({hx:tx,hy:ty-1}); }
     else { hints.push({hx:tx+1,hy:ty}); hints.push({hx:tx-1,hy:ty}); }
@@ -493,7 +506,7 @@ button,input{font-size:16px}
     }
   }
 
-  /* ===== Knight move dots (always visible) ===== */
+  /* ===== Knight move dots ===== */
   const knightOffsets = [
     {x:2,y:1},{x:2,y:-1},{x:-2,y:1},{x:-2,y:-1},
     {x:1,y:2},{x:1,y:-2},{x:-1,y:2},{x:-1,y:-2}
@@ -606,14 +619,14 @@ button,input{font-size:16px}
   function scheduleSpawn(){
     const next=Math.max(60, baseSpawnDelay / (speedMult*(slowFactor||1)));
     spawnTimer=setTimeout(function tick(){
-      if (!running) return;
+      if (!running || paused) return;
       (Math.random()<0.12 ? spawnPowerUp : spawnEnemy)();
       scheduleSpawn();
     }, next);
   }
   function scheduleDifficulty(){
     difficultyTimer=setInterval(function(){
-      if (!running) return;
+      if (!running || paused) return;
       speedMult += 0.4;
       speedEl.textContent = (speedMult*(slowFactor||1)).toFixed(1)+'×';
       clearTimeout(spawnTimer);
@@ -671,7 +684,7 @@ button,input{font-size:16px}
 
       const ex=Math.round(e.px/CELL()), ey=Math.round(e.py/CELL());
       if (ex===knight.x && ey===knight.y){
-        if (shield>0){ shield=0; bShield.classList.remove('active'); e.el.remove(); enemies.splice(i,1); game.classList.add('shake'); setTimeout(function(){game.classList.remove('shake');},220); SFX.shieldHit(); }
+        if (shield>0){ shield=0; bShield.classList.remove('active'); e.el.remove(); enemies.splice(i,1); game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'),220); SFX.shieldHit(); }
         else { gameOver(); return; }
       }
       if (e.py>SIZE*CELL()){ e.el.remove(); enemies.splice(i,1); }
@@ -705,11 +718,11 @@ button,input{font-size:16px}
   }
 
   /* ===== Loop ===== */
-  function loop(now){
-    if (!running) return;
-    const dt=now-lastTime; lastTime=now;
+  function loop(nowTs){
+    if (!running || paused) return;
+    const dt=nowTs-lastTime; lastTime=nowTs;
     moveEnemiesSmooth(dt);
-    scoreEl.textContent=((now-startTime)/1000).toFixed(1);
+    scoreEl.textContent=((nowTs-startTime-accTimeOffset)/1000).toFixed(1);
     requestAnimationFrame(loop);
   }
 
@@ -728,11 +741,21 @@ button,input{font-size:16px}
     arrowStep=0; firstArrow=null; clearGuide(); moveKnightTo(tx,ty);
   }
   document.addEventListener('keydown', function(e){
-    if (!running) return;
+    if (!running || paused) return;
     const k=e.key.replace('Arrow','').toLowerCase();
     const dir=DIRS[k]; if (!dir) return;
     e.preventDefault();
     processArrow(dir);
+  });
+
+  /* ===== D-Pad bindings ===== */
+  document.querySelectorAll('#dpad .dbtn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const d=btn.getAttribute('data-dir');
+      if (d==='cancel'){ arrowStep=0; firstArrow=null; clearGuide(); return; }
+      const dir = d==='up'?DIRS.up : d==='down'?DIRS.down : d==='left'?DIRS.left : DIRS.right;
+      processArrow(dir);
+    });
   });
 
   /* ===== Game over / restart ===== */
@@ -740,7 +763,7 @@ button,input{font-size:16px}
     if (!running) return;
     running=false; clearTimeout(spawnTimer); clearInterval(difficultyTimer);
     for (let i=0;i<dots.length;i++){ dots[i].remove(); } dots=[]; clearGuide();
-    game.classList.add('shake'); setTimeout(function(){game.classList.remove('shake');},350);
+    game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'),350);
     SFX.gameOver(); Music.stop();
 
     const over=document.createElement('div'); over.id='over';
@@ -765,7 +788,7 @@ button,input{font-size:16px}
       const name=(nameInput.value||'Player').trim();
       try{ localStorage.setItem('knightRunner_lastName', name); }catch(e){}
       addScore(name, finalScore);
-      saveBtn.disabled=true; renderLeaderboard(name, finalScore);
+      saveBtn.disabled=true; renderLeaderboard();
     });
     restartBtn.addEventListener('click', restart);
   }
@@ -773,16 +796,43 @@ button,input{font-size:16px}
     enemies.forEach(function(e){ e.el.remove(); }); enemies=[];
     powerups.forEach(function(p){ if(p.el){ p.el.remove(); } }); powerups=[];
     const over=document.getElementById('over'); if (over) over.remove();
+    const pausedOverlay=document.getElementById('paused'); if (pausedOverlay) pausedOverlay.remove();
+    paused=false; pauseBtn.textContent='⏸️'; pauseBtn.setAttribute('aria-pressed','false');
     speedMult=1.0; slowFactor=1.0; slowUntil=0; shield=0; speedMoves=0;
     bShield.classList.remove('active'); bSpeed.classList.remove('active'); bSlow.classList.remove('active');
     speedEl.textContent='1.0×';
-    startTime=performance.now(); lastTime=startTime;
+    startTime=performance.now(); lastTime=startTime; accTimeOffset=0;
     knight={x:3,y:6}; placeKnight();
     arrowStep=0; firstArrow=null; clearGuide();
     running=true; updateDots(); clearTimeout(spawnTimer); clearInterval(difficultyTimer);
     scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
     SFX.restart(); Music.start();
   }
+
+  /* ===== Pause / Resume ===== */
+  function pauseGame(){
+    if (!running || paused) return;
+    paused=true; pausedAt = performance.now();
+    Music.stop(); // fade music
+    clearTimeout(spawnTimer); clearInterval(difficultyTimer);
+    const p=document.createElement('div'); p.id='paused';
+    p.innerHTML='<h2>Paused</h2><button id="resumeBtn" style="padding:10px 14px;border-radius:10px;border:1px solid #fff4;background:#fff;color:#111;cursor:pointer;font-weight:700;">Resume</button>';
+    game.appendChild(p); p.style.display='flex';
+    pauseBtn.textContent='▶️'; pauseBtn.setAttribute('aria-pressed','true');
+    document.getElementById('resumeBtn').addEventListener('click', resumeGame);
+  }
+  function resumeGame(){
+    if (!paused) return;
+    const p=document.getElementById('paused'); if (p) p.remove();
+    const nowT=performance.now();
+    accTimeOffset += (nowT - pausedAt);
+    lastTime = nowT;
+    paused=false;
+    scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
+    Music.start();
+    pauseBtn.textContent='⏸️'; pauseBtn.setAttribute('aria-pressed','false');
+  }
+  pauseBtn.addEventListener('click', ()=>{ paused ? resumeGame() : pauseGame(); });
 
   /* ===== Initial layout & responsive relayout ===== */
   function layoutAll(scaleFrom){
@@ -808,14 +858,15 @@ button,input{font-size:16px}
         p.el.style.top =(p.y*cell)+'px';
       });
       updateDots();
+    } else {
+      updateDots();
     }
     guide.setAttribute('viewBox', '0 0 ' + (cell*SIZE) + ' ' + (cell*SIZE));
   }
 
   let lastCell = CELL();
-  layoutAll(); // first pass
+  layoutAll();
 
-  // Keep board aligned when --board changes
   if (window.ResizeObserver){
     const ro = new ResizeObserver(function(){
       const newCell = CELL();
