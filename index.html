@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Knight Runner — KR-2025-09-20</title>
+<title>Knight Runner — KR-2025-09-20 + Tutorial</title>
 <style>
 :root{ --board:600px; --cell: calc(var(--board) / 8); }
 *{box-sizing:border-box;}
@@ -21,8 +21,7 @@ h1{margin:6px 0 0;font-size:clamp(18px,3.8vw,28px);}
 #status{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .badge{padding:4px 8px;border-radius:999px;border:1px solid #444;background:#1c1c1c;font-size:12px;opacity:.9}
 .badge.active{border-color:#2ecc71;box-shadow:0 0 0 2px #2ecc7133 inset}
-#muteBtn{padding:6px 10px;border-radius:999px;border:1px solid #444;background:#1c1c1c;color:#fff;cursor:pointer}
-#pauseBtn{padding:6px 10px;border-radius:999px;border:1px solid #444;background:#1c1c1c;color:#fff;cursor:pointer}
+#muteBtn,#pauseBtn,#helpBtn{padding:6px 10px;border-radius:999px;border:1px solid #444;background:#1c1c1c;color:#fff;cursor:pointer}
 button,input{font-size:16px}
 
 /* Game frame */
@@ -104,14 +103,6 @@ button,input{font-size:16px}
 #resetScores{padding:6px 10px;border-radius:8px;border:1px solid #ff7675;background:#ff7675;color:#111;cursor:pointer;font-weight:700;}
 #resetScores:active{transform:translateY(1px);}
 
-/* Sparkle */
-.sparkle{position:absolute;pointer-events:none;z-index:150;width:8px;height:8px;border-radius:50%;background:#fff;opacity:.9;animation:spark .5s ease-out forwards;}
-@keyframes spark{to{transform:translateY(-12px) scale(.2);opacity:0}}
-
-/* Error overlay */
-#errorOverlay{position:fixed;inset:0;background:#1b1b1bcc;color:#fff;z-index:9999;display:none;align-items:flex-start;justify-content:center;padding:16px;overflow:auto}
-#errorOverlay pre{max-width:900px;width:100%;background:#2a2a2a;border:1px solid #ff6b6b;border-radius:10px;padding:12px;white-space:pre-wrap;word-break:break-word}
-
 /* D-Pad */
 #dpad{
   --sz:64px;
@@ -126,6 +117,36 @@ button,input{font-size:16px}
   user-select:none; -webkit-tap-highlight-color:transparent;
 }
 .dbtn:active{transform:translateY(1px);}
+
+/* Tutorial (coach) */
+#coach{
+  position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.55);padding:16px;
+}
+#coachCard{
+  width:min(520px, 92vw);
+  background:#161616;border:1px solid #2b2b2b;border-radius:14px;box-shadow:0 8px 32px #000a;
+  padding:14px 14px 12px; text-align:left;
+}
+#coachCard h3{margin:0 0 8px;font-size:clamp(18px,4.2vw,22px);}
+#coachCard p{margin:0 0 12px;opacity:.9;line-height:1.35;}
+#coachBtns{display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:8px;}
+#coachBtns .left{display:flex;gap:8px;}
+.coachBtn{
+  padding:8px 12px;border-radius:10px;border:1px solid #2ecc71;background:#2ecc71;color:#111;font-weight:800;cursor:pointer;
+}
+.coachGhost{
+  padding:8px 12px;border-radius:10px;border:1px solid #444;background:#222;color:#fff;cursor:pointer;
+}
+#dontShow{display:flex;align-items:center;gap:6px;font-size:13px;opacity:.9;}
+/* step-specific highlights */
+.highlight-board{ box-shadow:0 0 0 3px #2ecc71 inset; }
+.highlight-dpad{ outline:3px solid #00d2ff; outline-offset:6px; border-radius:14px; }
+.highlight-hud { outline:3px solid #f1c40f; outline-offset:6px; border-radius:14px; }
+
+/* Error overlay */
+#errorOverlay{position:fixed;inset:0;background:#1b1b1bcc;color:#fff;z-index:9999;display:none;align-items:flex-start;justify-content:center;padding:16px;overflow:auto}
+#errorOverlay pre{max-width:900px;width:100%;background:#2a2a2a;border:1px solid #ff6b6b;border-radius:10px;padding:12px;white-space:pre-wrap;word-break:break-word}
 
 /* Compact leaderboard on short screens */
 @media (max-height: 740px) {
@@ -145,6 +166,7 @@ button,input{font-size:16px}
     <div class="badge" id="bSlow">🕒 slow</div>
     <button id="muteBtn" aria-pressed="false" title="Mute/Unmute">🔊</button>
     <button id="pauseBtn" aria-pressed="false" title="Pause/Resume">⏸️</button>
+    <button id="helpBtn"  aria-pressed="false" title="Tutorial">❔</button>
   </div>
   <!-- D-Pad -->
   <div id="dpad" aria-label="Knight move D-Pad">
@@ -171,6 +193,21 @@ button,input{font-size:16px}
 <!-- Overlays -->
 <div id="errorOverlay"><pre id="errorText"></pre></div>
 
+<!-- Tutorial overlay -->
+<div id="coach" role="dialog" aria-modal="true" aria-labelledby="coachTitle" aria-describedby="coachBody">
+  <div id="coachCard">
+    <h3 id="coachTitle">Welcome to Knight Runner</h3>
+    <p id="coachBody">Survive as long as you can. Avoid enemies. Collect helpful power-ups.</p>
+    <div id="coachBtns">
+      <div class="left">
+        <button id="coachPrev" class="coachGhost">Back</button>
+        <button id="coachNext" class="coachBtn">Next</button>
+      </div>
+      <label id="dontShow"><input type="checkbox" id="coachDont"> Don’t show again</label>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ===== Error overlay ===== */
 (function(){
@@ -178,10 +215,10 @@ button,input{font-size:16px}
   const text = document.getElementById('errorText');
   function show(msg){
     overlay.style.display='flex';
-    text.textContent = 'JavaScript error:\\n\\n' + msg + '\\n\\n(Hard refresh after fixing)';
+    text.textContent = 'JavaScript error:\n\n' + msg + '\n\n(Hard refresh after fixing)';
   }
   window.addEventListener('error', (e)=>{
-    const where = (e.filename ? ('\\n' + e.filename) : '') + (e.lineno? (':' + e.lineno) : '');
+    const where = (e.filename ? ('\n' + e.filename) : '') + (e.lineno? (':' + e.lineno) : '');
     show((e.message||'Unknown error') + where);
   });
   window.addEventListener('unhandledrejection', (e)=>{
@@ -234,6 +271,7 @@ button,input{font-size:16px}
   const lbList  = document.getElementById('lbList');
   const muteBtn = document.getElementById('muteBtn');
   const pauseBtn= document.getElementById('pauseBtn');
+  const helpBtn = document.getElementById('helpBtn');
   const bShield = document.getElementById('bShield');
   const bSpeed  = document.getElementById('bSpeed');
   const bSlow   = document.getElementById('bSlow');
@@ -710,11 +748,14 @@ button,input{font-size:16px}
   }
 
   /* ===== Knight movement ===== */
+  // Tutorial hook toggled by coach
+  let _tutorialWaitForMove = false;
   function moveKnightTo(tx,ty){
     if (tx<0||tx>=SIZE||ty<0||ty>=SIZE) return;
     knight.x=tx; knight.y=ty; placeKnight();
     SFX.jump(); pickupAt(tx,ty); checkCollision(); updateDots(); clearGuide();
     if (speedMoves>0){ speedMoves--; if (speedMoves===0) bSpeed.classList.remove('active'); }
+    if (_tutorialWaitForMove) { _tutorialWaitForMove = false; Coach.next(); }
   }
 
   /* ===== Loop ===== */
@@ -749,137 +790,4 @@ button,input{font-size:16px}
   });
 
   /* ===== D-Pad bindings ===== */
-  document.querySelectorAll('#dpad .dbtn').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const d=btn.getAttribute('data-dir');
-      if (d==='cancel'){ arrowStep=0; firstArrow=null; clearGuide(); return; }
-      const dir = d==='up'?DIRS.up : d==='down'?DIRS.down : d==='left'?DIRS.left : DIRS.right;
-      processArrow(dir);
-    });
-  });
-
-  /* ===== Game over / restart ===== */
-  function gameOver(){
-    if (!running) return;
-    running=false; clearTimeout(spawnTimer); clearInterval(difficultyTimer);
-    for (let i=0;i<dots.length;i++){ dots[i].remove(); } dots=[]; clearGuide();
-    game.classList.add('shake'); setTimeout(()=>game.classList.remove('shake'),350);
-    SFX.gameOver(); Music.stop();
-
-    const over=document.createElement('div'); over.id='over';
-    const finalScore=parseFloat(scoreEl.textContent)||0;
-    over.innerHTML=
-      '<h2>Game Over</h2>'+
-      '<p>You survived <strong>'+finalScore.toFixed(1)+'s</strong></p>'+
-      '<div id="saveRow">'+
-        '<input id="playerName" maxlength="16" placeholder="Your name">'+
-        '<button id="saveBtn">Save Score</button>'+
-      '</div>'+
-      '<button id="restart">Play Again</button>';
-    game.appendChild(over); over.style.display='flex';
-
-    const nameInput=over.querySelector('#playerName');
-    const saveBtn=over.querySelector('#saveBtn');
-    const restartBtn=over.querySelector('#restart');
-    const lastName=(function(){ try{return localStorage.getItem('knightRunner_lastName')||'';}catch(e){return '';} })();
-    if (lastName) nameInput.value=lastName;
-
-    saveBtn.addEventListener('click', function(){
-      const name=(nameInput.value||'Player').trim();
-      try{ localStorage.setItem('knightRunner_lastName', name); }catch(e){}
-      addScore(name, finalScore);
-      saveBtn.disabled=true; renderLeaderboard();
-    });
-    restartBtn.addEventListener('click', restart);
-  }
-  function restart(){
-    enemies.forEach(function(e){ e.el.remove(); }); enemies=[];
-    powerups.forEach(function(p){ if(p.el){ p.el.remove(); } }); powerups=[];
-    const over=document.getElementById('over'); if (over) over.remove();
-    const pausedOverlay=document.getElementById('paused'); if (pausedOverlay) pausedOverlay.remove();
-    paused=false; pauseBtn.textContent='⏸️'; pauseBtn.setAttribute('aria-pressed','false');
-    speedMult=1.0; slowFactor=1.0; slowUntil=0; shield=0; speedMoves=0;
-    bShield.classList.remove('active'); bSpeed.classList.remove('active'); bSlow.classList.remove('active');
-    speedEl.textContent='1.0×';
-    startTime=performance.now(); lastTime=startTime; accTimeOffset=0;
-    knight={x:3,y:6}; placeKnight();
-    arrowStep=0; firstArrow=null; clearGuide();
-    running=true; updateDots(); clearTimeout(spawnTimer); clearInterval(difficultyTimer);
-    scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
-    SFX.restart(); Music.start();
-  }
-
-  /* ===== Pause / Resume ===== */
-  function pauseGame(){
-    if (!running || paused) return;
-    paused=true; pausedAt = performance.now();
-    Music.stop(); // fade music
-    clearTimeout(spawnTimer); clearInterval(difficultyTimer);
-    const p=document.createElement('div'); p.id='paused';
-    p.innerHTML='<h2>Paused</h2><button id="resumeBtn" style="padding:10px 14px;border-radius:10px;border:1px solid #fff4;background:#fff;color:#111;cursor:pointer;font-weight:700;">Resume</button>';
-    game.appendChild(p); p.style.display='flex';
-    pauseBtn.textContent='▶️'; pauseBtn.setAttribute('aria-pressed','true');
-    document.getElementById('resumeBtn').addEventListener('click', resumeGame);
-  }
-  function resumeGame(){
-    if (!paused) return;
-    const p=document.getElementById('paused'); if (p) p.remove();
-    const nowT=performance.now();
-    accTimeOffset += (nowT - pausedAt);
-    lastTime = nowT;
-    paused=false;
-    scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
-    Music.start();
-    pauseBtn.textContent='⏸️'; pauseBtn.setAttribute('aria-pressed','false');
-  }
-  pauseBtn.addEventListener('click', ()=>{ paused ? resumeGame() : pauseGame(); });
-
-  /* ===== Initial layout & responsive relayout ===== */
-  function layoutAll(scaleFrom){
-    const cell = CELL();
-    // squares
-    const squares = document.querySelectorAll('.square');
-    squares.forEach(function(sq, i){
-      const x=i%SIZE, y=(i/SIZE)|0;
-      sq.style.left=(x*cell)+'px'; sq.style.top=(y*cell)+'px';
-    });
-    // knight
-    placeKnight();
-    // enemies/powerups/dots scaling when cell size changes
-    if (scaleFrom && scaleFrom>0){
-      const s = cell/scaleFrom;
-      enemies.forEach(function(e){
-        e.px*=s; e.py*=s; e.el.style.left=e.px+'px'; e.el.style.top=e.py+'px';
-        if (e.qtpX!=null){ e.qtpX*=s; e.qtpY*=s; }
-        if (e.btpX!=null){ e.btpX*=s; e.btpY*=s; }
-      });
-      powerups.forEach(function(p){
-        p.el.style.left=(p.x*cell)+'px';
-        p.el.style.top =(p.y*cell)+'px';
-      });
-      updateDots();
-    } else {
-      updateDots();
-    }
-    guide.setAttribute('viewBox', '0 0 ' + (cell*SIZE) + ' ' + (cell*SIZE));
-  }
-
-  let lastCell = CELL();
-  layoutAll();
-
-  if (window.ResizeObserver){
-    const ro = new ResizeObserver(function(){
-      const newCell = CELL();
-      layoutAll(lastCell);
-      lastCell = newCell;
-    });
-    ro.observe(game);
-  }
-
-  /* ===== Start ===== */
-  updateDots(); scheduleSpawn(); scheduleDifficulty(); requestAnimationFrame(loop);
-  applyMuteUI();
-})();
-</script>
-</body>
-</html>
+ 
